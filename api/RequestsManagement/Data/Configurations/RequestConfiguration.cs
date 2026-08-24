@@ -41,9 +41,11 @@ public class RequestConfiguration : IEntityTypeConfiguration<RequestEntity>
         builder.HasIndex(r => new { r.Status, r.CreatedAt })
             .HasDatabaseName("IX_Requests_Status_CreatedAt");
 
-        // Supports priority filtering and the "requests by priority" aggregation.
-        builder.HasIndex(r => r.Priority)
-            .HasDatabaseName("IX_Requests_Priority");
+        // Supports "filter by priority, sorted by newest" (Priority leads so it can be
+        // seeked, CreatedAt trails so the seek is already in sort order); Priority still
+        // leads for the "requests by priority" aggregation.
+        builder.HasIndex(r => new { r.Priority, r.CreatedAt })
+            .HasDatabaseName("IX_Requests_Priority_CreatedAt");
 
         // Supports the unfiltered default-sort listing and date-based aggregation.
         builder.HasIndex(r => r.CreatedAt)
