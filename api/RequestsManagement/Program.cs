@@ -23,6 +23,13 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 
 builder.Services.AddApplicationServices();
 
+const string AngularDevCorsPolicy = "AngularDev";
+builder.Services.AddCors(options =>
+    options.AddPolicy(AngularDevCorsPolicy, policy =>
+        policy.WithOrigins("http://localhost:4200")
+            .AllowAnyHeader()
+            .AllowAnyMethod()));
+
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
@@ -39,6 +46,7 @@ if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
+    app.UseCors(AngularDevCorsPolicy);
 }
 
 app.UseHttpsRedirection();
