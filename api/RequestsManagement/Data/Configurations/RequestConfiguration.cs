@@ -50,5 +50,16 @@ public class RequestConfiguration : IEntityTypeConfiguration<RequestEntity>
         // Supports the unfiltered default-sort listing and date-based aggregation.
         builder.HasIndex(r => r.CreatedAt)
             .HasDatabaseName("IX_Requests_CreatedAt");
+
+        // Supports "sort by title/organization" (both are sortable columns). Without these,
+        // SQL Server has to Sort the whole table for every page — cheap in CPU (~50-90ms for
+        // 12k rows) but the sort can spill to tempdb, which under real disk/AV contention
+        // occasionally stalls for 20+ seconds. An index lets it do an ordered index scan
+        // instead, with no sort and no spill risk.
+        builder.HasIndex(r => r.Title)
+            .HasDatabaseName("IX_Requests_Title");
+
+        builder.HasIndex(r => r.OrganizationName)
+            .HasDatabaseName("IX_Requests_OrganizationName");
     }
 }

@@ -16,19 +16,29 @@ public static class RequestSeeder
 
     private static readonly string[] RequestTypes =
     [
-        "Service outage", "Billing dispute", "Access request", "Data export",
-        "Account verification", "Contract renewal", "Refund request", "Technical support",
-        "Onboarding", "Compliance review", "Feature request", "Password reset",
-        "Integration issue", "Invoice correction", "License upgrade", "Security audit",
-        "Vendor inquiry", "Delivery delay", "Product defect", "Cancellation request"
+        "תקלת שירות", "מחלוקת בחיוב", "בקשת גישה", "ייצוא נתונים",
+        "אימות חשבון", "חידוש חוזה", "בקשת החזר כספי", "תמיכה טכנית",
+        "קליטת עובד", "בדיקת ציות", "בקשת פיצ'ר", "איפוס סיסמה",
+        "תקלת אינטגרציה", "תיקון חשבונית", "שדרוג רישיון", "ביקורת אבטחה",
+        "פנייה מספק", "עיכוב במשלוח", "פגם במוצר", "בקשת ביטול"
     ];
 
     private static readonly string[] RequestSubjects =
     [
-        "production environment", "customer portal", "monthly invoice", "API integration",
-        "user account", "mobile application", "payment gateway", "support ticket queue",
-        "third-party vendor", "internal dashboard", "email notifications", "data pipeline",
-        "employee onboarding", "annual contract", "shipping order", "compliance report"
+        "סביבת הפרודקשן", "פורטל הלקוחות", "החשבונית החודשית", "אינטגרציית ה-API",
+        "חשבון המשתמש", "האפליקציה הניידת", "שער התשלומים", "תור פניות התמיכה",
+        "ספק חיצוני", "לוח הבקרה הפנימי", "התראות דוא\"ל", "צינור הנתונים",
+        "קליטת עובדים", "החוזה השנתי", "הזמנת המשלוח", "דוח הציות"
+    ];
+
+    private static readonly string[] OrganizationNames =
+    [
+        "חברת התוכנה הישראלית בע\"מ", "קבוצת פתרונות דיגיטליים", "מערכות מידע מתקדמות בע\"מ",
+        "טכנולוגיות ענן ישראל", "רשת בתי החולים הכללית", "בנק הפועלים לישראל",
+        "חברת החשמל לישראל", "משרד התחבורה", "עיריית תל אביב-יפו", "אוניברסיטת תל אביב",
+        "קופת חולים כללית", "חברת נמל אשדוד", "התעשייה האווירית לישראל", "רכבת ישראל",
+        "משרד הבריאות", "בזק החברה הישראלית לתקשורת", "שופרסל בע\"מ",
+        "אל על נתיבי אוויר לישראל", "פרטנר תקשורת", "סלקום ישראל"
     ];
 
     public static async Task SeedAsync(AppDbContext context, CancellationToken cancellationToken = default)
@@ -45,7 +55,7 @@ public static class RequestSeeder
 
         var faker = new Faker<RequestEntity>()
             .RuleFor(r => r.Title, f => $"{f.PickRandom(RequestTypes)} - {f.PickRandom(RequestSubjects)}")
-            .RuleFor(r => r.OrganizationName, f => f.Company.CompanyName())
+            .RuleFor(r => r.OrganizationName, f => f.PickRandom(OrganizationNames))
             .RuleFor(r => r.Status, f => f.PickRandom(statuses))
             .RuleFor(r => r.Priority, f => f.PickRandom(priorities))
             .RuleFor(r => r.CreatedAt, f => f.Date.Between(AnchorDate.AddMonths(-18), AnchorDate))
