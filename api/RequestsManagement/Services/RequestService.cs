@@ -11,7 +11,7 @@ namespace RequestsManagement.Services;
 public class RequestService(AppDbContext db) : IRequestService
 {
     private static readonly string[] SortableFields =
-        ["title", "organizationname", "status", "priority", "createdat", "updatedat"];
+        ["status", "priority", "createdat", "updatedat"];
 
     public async Task<PagedResultDto<RequestDto>> GetRequestsAsync(RequestQueryDto query, CancellationToken cancellationToken = default)
     {
@@ -184,8 +184,6 @@ public class RequestService(AppDbContext db) : IRequestService
 
         return sortBy.Trim().ToLowerInvariant() switch
         {
-            "title" => descending ? query.OrderByDescending(r => r.Title) : query.OrderBy(r => r.Title),
-            "organizationname" => descending ? query.OrderByDescending(r => r.OrganizationName) : query.OrderBy(r => r.OrganizationName),
             "status" => descending ? query.OrderByDescending(r => r.Status) : query.OrderBy(r => r.Status),
             "priority" => descending ? query.OrderByDescending(r => r.Priority) : query.OrderBy(r => r.Priority),
             "updatedat" => descending ? query.OrderByDescending(r => r.UpdatedAt) : query.OrderBy(r => r.UpdatedAt),

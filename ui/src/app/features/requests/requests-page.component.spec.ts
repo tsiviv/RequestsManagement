@@ -183,12 +183,12 @@ describe('RequestsPageComponent', () => {
   it('sends the correct sort parameters and resets to page 1 when sorting changes', async () => {
     flushInitialLoad();
 
-    getTable().sortChange.emit({ active: 'title', direction: 'asc' });
+    getTable().sortChange.emit({ active: 'status', direction: 'asc' });
     fixture.detectChanges();
     await fixture.whenStable();
 
     const req = httpMock.expectOne((r) => r.url === baseUrl && r.method === 'GET');
-    expect(req.request.params.get('sortBy')).toBe('title');
+    expect(req.request.params.get('sortBy')).toBe('status');
     expect(req.request.params.get('sortDirection')).toBe('asc');
     expect(req.request.params.get('page')).toBe('1');
     req.flush(SAMPLE_PAGED);

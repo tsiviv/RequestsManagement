@@ -51,15 +51,15 @@ public class RequestConfiguration : IEntityTypeConfiguration<RequestEntity>
         builder.HasIndex(r => r.CreatedAt)
             .HasDatabaseName("IX_Requests_CreatedAt");
 
-        // Supports "sort by title/organization" (both are sortable columns). Without these,
-        // SQL Server has to Sort the whole table for every page — cheap in CPU (~50-90ms for
-        // 12k rows) but the sort can spill to tempdb, which under real disk/AV contention
-        // occasionally stalls for 20+ seconds. An index lets it do an ordered index scan
-        // instead, with no sort and no spill risk.
-        builder.HasIndex(r => r.Title)
-            .HasDatabaseName("IX_Requests_Title");
+        // Supports "sort by last updated" — the only sortable column not already covered
+        // by a composite index above. Without it, sorting by UpdatedAt has the same
+        // unindexed-sort risk (tempdb spill under disk/AV contention) that Status/Priority/
+        // CreatedAt are protected against.
+        builder.HasIndex(r => r.UpdatedAt)
+            .HasDatabaseName("IX_Requests_UpdatedAt");
 
-        builder.HasIndex(r => r.OrganizationName)
-            .HasDatabaseName("IX_Requests_OrganizationName");
+        // Title/OrganizationName are intentionally not sortable (neither via the API's
+        // SortableFields whitelist nor exposed as sortable columns in the UI) and so have
+        // no dedicated index — only Status, Priority, CreatedAt, UpdatedAt are sortable.
     }
 }

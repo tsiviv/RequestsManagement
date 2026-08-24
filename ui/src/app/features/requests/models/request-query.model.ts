@@ -1,12 +1,6 @@
 import { RequestPriority, RequestStatus } from './request.model';
 
-export type RequestSortField =
-  | 'title'
-  | 'organizationName'
-  | 'status'
-  | 'priority'
-  | 'createdAt'
-  | 'updatedAt';
+export type RequestSortField = 'status' | 'priority' | 'createdAt' | 'updatedAt';
 
 export type RequestSortDirection = 'asc' | 'desc';
 
