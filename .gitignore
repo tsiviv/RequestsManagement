@@ -1,0 +1,24 @@
+## .NET (api/)
+bin/
+obj/
+
+## Visual Studio
+.vs/
+*.user
+*.suo
+
+## Angular / Node (ui/)
+node_modules/
+dist/
+.angular/
+
+## Rider / VS Code
+.idea/
+.vscode/
+
+## OS
+.DS_Store
+Thumbs.db
+
+## Logs
+*.log

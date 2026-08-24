@@ -1,0 +1,47 @@
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 1000;
+  padding: 0.75rem 1rem;
+  background: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+
+  &:focus {
+    left: 0.5rem;
+    top: 0.5rem;
+  }
+}
+
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+
+  &__title {
+    margin-left: 0.5rem;
+    font-weight: 500;
+    font-size: 1.125rem;
+  }
+
+  &__spacer {
+    flex: 1 1 auto;
+  }
+
+  &__context {
+    font-size: 0.875rem;
+    opacity: 0.85;
+  }
+}
+
+.app-main {
+  display: block;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 1.5rem;
+  box-sizing: border-box;
+
+  @media (max-width: 599px) {
+    padding: 1rem;
+  }
+}
