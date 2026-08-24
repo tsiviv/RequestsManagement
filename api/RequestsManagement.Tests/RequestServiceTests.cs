@@ -133,6 +133,14 @@ public class RequestServiceTests
         Assert.Equal(1, summary.ByStatus[nameof(RequestStatus.Completed)]);
         Assert.Equal(2, summary.ByPriority[nameof(RequestPriority.High)]);
         Assert.Equal(1, summary.ByPriority[nameof(RequestPriority.Low)]);
+
+        // Statuses/priorities with zero matching requests must still be present (as 0),
+        // since the frontend's RequestSummary type is a complete map over every enum value.
+        Assert.Equal(0, summary.ByStatus[nameof(RequestStatus.InProgress)]);
+        Assert.Equal(0, summary.ByStatus[nameof(RequestStatus.Waiting)]);
+        Assert.Equal(0, summary.ByPriority[nameof(RequestPriority.Medium)]);
+        Assert.Equal(Enum.GetValues<RequestStatus>().Length, summary.ByStatus.Count);
+        Assert.Equal(Enum.GetValues<RequestPriority>().Length, summary.ByPriority.Count);
     }
 
     // --- Status update behavior --------------------------------------------

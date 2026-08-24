@@ -81,9 +81,22 @@ public class RequestService(AppDbContext db) : IRequestService
         return new RequestSummaryDto
         {
             Total = total,
-            ByStatus = byStatus.ToDictionary(x => x.Status.ToString(), x => x.Count),
-            ByPriority = byPriority.ToDictionary(x => x.Priority.ToString(), x => x.Count)
+            ByStatus = WithAllEnumKeys(byStatus.ToDictionary(x => x.Status, x => x.Count)),
+            ByPriority = WithAllEnumKeys(byPriority.ToDictionary(x => x.Priority, x => x.Count))
         };
+    }
+
+    // The frontend's summary type is a complete map over every enum value, so a
+    // status/priority with zero matching requests must still appear (as 0) rather
+    // than being omitted, which is what a bare GroupBy would otherwise produce.
+    private static Dictionary<string, int> WithAllEnumKeys<TEnum>(Dictionary<TEnum, int> counts) where TEnum : struct, Enum
+    {
+        var result = new Dictionary<string, int>();
+        foreach (var value in Enum.GetValues<TEnum>())
+        {
+            result[value.ToString()] = counts.GetValueOrDefault(value);
+        }
+        return result;
     }
 
     public async Task<RequestDto> UpdateStatusAsync(int id, UpdateRequestStatusDto dto, CancellationToken cancellationToken = default)
