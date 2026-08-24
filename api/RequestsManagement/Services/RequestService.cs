@@ -37,23 +37,36 @@ public class RequestService(AppDbContext db) : IRequestService
 
         var totalCount = await requests.CountAsync(cancellationToken);
 
-        requests = ApplySort(requests, query.SortBy, query.SortDirection);
+        // Computed as a long so an extreme but otherwise valid Int32 page (e.g. int.MaxValue)
+        // can never overflow the Int32 Skip/Take EF Core requires. When the offset is at or
+        // past totalCount there is nothing to fetch, so skip the query entirely.
+        var skip = (long)(query.Page - 1) * query.PageSize;
 
-        var items = await requests
-            .Skip((query.Page - 1) * query.PageSize)
-            .Take(query.PageSize)
-            .Select(r => new RequestDto
-            {
-                Id = r.Id,
-                Title = r.Title,
-                OrganizationName = r.OrganizationName,
-                Status = r.Status,
-                Priority = r.Priority,
-                CreatedAt = r.CreatedAt,
-                UpdatedAt = r.UpdatedAt,
-                RowVersion = Convert.ToBase64String(r.RowVersion)
-            })
-            .ToListAsync(cancellationToken);
+        List<RequestDto> items;
+        if (skip >= totalCount)
+        {
+            items = [];
+        }
+        else
+        {
+            requests = ApplySort(requests, query.SortBy, query.SortDirection);
+
+            items = await requests
+                .Skip((int)skip)
+                .Take(query.PageSize)
+                .Select(r => new RequestDto
+                {
+                    Id = r.Id,
+                    Title = r.Title,
+                    OrganizationName = r.OrganizationName,
+                    Status = r.Status,
+                    Priority = r.Priority,
+                    CreatedAt = r.CreatedAt,
+                    UpdatedAt = r.UpdatedAt,
+                    RowVersion = Convert.ToBase64String(r.RowVersion)
+                })
+                .ToListAsync(cancellationToken);
+        }
 
         return new PagedResultDto<RequestDto>
         {

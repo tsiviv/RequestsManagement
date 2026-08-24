@@ -99,6 +99,32 @@ public class RequestServiceTests
     }
 
     [Fact]
+    public async Task GetRequestsAsync_WithPageFarBeyondAvailableData_ReturnsEmptyPageInsteadOfOverflowing()
+    {
+        var dbName = Guid.NewGuid().ToString();
+
+        await using (var seedContext = CreateContext(dbName))
+        {
+            seedContext.Requests.Add(NewRequest("A", "Org", RequestStatus.New, RequestPriority.Low, DateTime.UtcNow));
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var context = CreateContext(dbName);
+        var service = new RequestService(context);
+
+        var result = await service.GetRequestsAsync(new RequestQueryDto
+        {
+            Page = int.MaxValue,
+            PageSize = 100
+        });
+
+        Assert.Empty(result.Items);
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal(int.MaxValue, result.Page);
+        Assert.Equal(100, result.PageSize);
+    }
+
+    [Fact]
     public async Task GetRequestsAsync_WithInvalidSortField_ThrowsValidationException()
     {
         await using var context = CreateContext(Guid.NewGuid().ToString());
