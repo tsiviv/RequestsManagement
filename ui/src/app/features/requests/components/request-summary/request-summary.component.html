@@ -1,0 +1,34 @@
+<section class="summary" aria-label="Requests summary">
+  @if (loading() && !summary()) {
+    <div class="summary__state" role="status">
+      <mat-spinner diameter="28" />
+      <span>Loading summary…</span>
+    </div>
+  } @else if (error() && !summary()) {
+    <div class="summary__state" role="alert">
+      <span>Unable to load summary.</span>
+      <button type="button" mat-button color="primary" (click)="retry.emit()">Try again</button>
+    </div>
+  } @else if (summary()) {
+    <div class="summary__grid">
+      @for (tile of statusTiles(); track tile.label) {
+        <mat-card class="summary__tile" appearance="outlined">
+          <span class="summary__value">{{ tile.value }}</span>
+          <span class="summary__label">{{ tile.label }}</span>
+        </mat-card>
+      }
+
+      <mat-card class="summary__tile summary__tile--priority" appearance="outlined">
+        <span class="summary__label">By Priority</span>
+        <div class="summary__priority-row">
+          @for (priority of priorities; track priority) {
+            <span class="summary__priority-item">
+              <span class="summary__priority-count">{{ summary()!.byPriority[priority] }}</span>
+              <span class="summary__priority-name">{{ priorityLabels[priority] }}</span>
+            </span>
+          }
+        </div>
+      </mat-card>
+    </div>
+  }
+</section>

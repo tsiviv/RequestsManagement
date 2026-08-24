@@ -1,0 +1,67 @@
+<section class="page-header">
+  <h1>Requests</h1>
+  <p>Manage, search and update incoming requests.</p>
+</section>
+
+<app-request-summary
+  [summary]="summary()"
+  [loading]="summaryLoading()"
+  [error]="summaryError()"
+  (retry)="reloadSummary()"
+/>
+
+<app-request-filters #filtersRef (filtersChange)="onFiltersChange($event)" />
+
+<section class="requests-panel" aria-live="polite">
+  @if (loading() && !pagedResult()) {
+    <div class="state-panel" role="status">
+      <mat-spinner diameter="40" />
+      <p>Loading requests…</p>
+    </div>
+  } @else if (error() && !pagedResult()) {
+    <div class="state-panel" role="alert">
+      <p>Unable to load requests.</p>
+      <p class="state-panel__detail">{{ error()!.message }}</p>
+      <button type="button" mat-flat-button color="primary" (click)="reloadRequests()">
+        Try again
+      </button>
+    </div>
+  } @else if (pagedResult(); as result) {
+    @if (loading()) {
+      <mat-progress-bar mode="indeterminate" aria-label="Refreshing results" />
+    }
+
+    @if (result.items.length === 0) {
+      <div class="state-panel">
+        @if (isFiltered()) {
+          <p>No requests match your current search and filters.</p>
+          <button type="button" mat-stroked-button (click)="filtersRef.resetFilters()">
+            Reset filters
+          </button>
+        } @else {
+          <p>No requests available.</p>
+        }
+      </div>
+    } @else {
+      <app-requests-table
+        [items]="result.items"
+        [totalCount]="result.totalCount"
+        [page]="query().page"
+        [pageSize]="query().pageSize"
+        [sortBy]="query().sortBy!"
+        [sortDirection]="query().sortDirection!"
+        [updatingIds]="updatingIds()"
+        (sortChange)="onSortChange($event)"
+        (pageChange)="onPageChange($event)"
+        (statusChange)="onStatusChange($event)"
+      />
+    }
+
+    @if (error()) {
+      <p class="inline-error" role="alert">
+        {{ error()!.message }}
+        <button type="button" mat-button (click)="reloadRequests()">Try again</button>
+      </p>
+    }
+  }
+</section>

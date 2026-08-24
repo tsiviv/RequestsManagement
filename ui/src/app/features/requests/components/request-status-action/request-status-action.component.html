@@ -1,0 +1,17 @@
+<div class="status-action">
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="status-action__field">
+    <mat-select
+      [formControl]="control"
+      [attr.aria-label]="'Update status, currently ' + statusLabels[status()] + ', for ' + requestTitle()"
+    >
+      @for (option of statuses; track option) {
+        <mat-option [value]="option">{{ statusLabels[option] }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+
+  @if (pending()) {
+    <mat-spinner diameter="18" aria-hidden="true" />
+    <span class="sr-only" role="status">Updating status…</span>
+  }
+</div>

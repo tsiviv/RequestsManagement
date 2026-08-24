@@ -1,0 +1,82 @@
+<div class="table-scroll">
+  <table
+    mat-table
+    [dataSource]="items()"
+    matSort
+    matSortDisableClear
+    [matSortActive]="sortBy()"
+    [matSortDirection]="sortDirection()"
+    (matSortChange)="sortChange.emit($event)"
+    class="requests-table"
+  >
+    <ng-container matColumnDef="id">
+      <th mat-header-cell *matHeaderCellDef scope="col">ID</th>
+      <td mat-cell *matCellDef="let row">{{ row.id }}</td>
+    </ng-container>
+
+    <ng-container matColumnDef="title">
+      <th mat-header-cell *matHeaderCellDef mat-sort-header scope="col">Title</th>
+      <td mat-cell *matCellDef="let row">{{ row.title }}</td>
+    </ng-container>
+
+    <ng-container matColumnDef="organizationName">
+      <th mat-header-cell *matHeaderCellDef mat-sort-header scope="col">Organization</th>
+      <td mat-cell *matCellDef="let row">{{ row.organizationName }}</td>
+    </ng-container>
+
+    <ng-container matColumnDef="status">
+      <th mat-header-cell *matHeaderCellDef mat-sort-header scope="col">Status</th>
+      <td mat-cell *matCellDef="let row">
+        <span class="badge" [class]="statusBadgeClass(row)">
+          <mat-icon aria-hidden="true">{{ statusIcon(row) }}</mat-icon>
+          {{ statusLabel(row) }}
+        </span>
+      </td>
+    </ng-container>
+
+    <ng-container matColumnDef="priority">
+      <th mat-header-cell *matHeaderCellDef mat-sort-header scope="col">Priority</th>
+      <td mat-cell *matCellDef="let row">
+        <span class="badge" [class]="priorityBadgeClass(row)">
+          <mat-icon aria-hidden="true">{{ priorityIcon(row) }}</mat-icon>
+          {{ priorityLabel(row) }}
+        </span>
+      </td>
+    </ng-container>
+
+    <ng-container matColumnDef="createdAt">
+      <th mat-header-cell *matHeaderCellDef mat-sort-header scope="col">Created</th>
+      <td mat-cell *matCellDef="let row">{{ row.createdAt | date: 'MMM d, y, h:mm a' }}</td>
+    </ng-container>
+
+    <ng-container matColumnDef="updatedAt">
+      <th mat-header-cell *matHeaderCellDef mat-sort-header scope="col">Updated</th>
+      <td mat-cell *matCellDef="let row">{{ row.updatedAt | date: 'MMM d, y, h:mm a' }}</td>
+    </ng-container>
+
+    <ng-container matColumnDef="actions">
+      <th mat-header-cell *matHeaderCellDef scope="col">Actions</th>
+      <td mat-cell *matCellDef="let row">
+        <app-request-status-action
+          [status]="row.status"
+          [requestTitle]="row.title"
+          [pending]="updatingIds().has(row.id)"
+          (statusChange)="onStatusChange(row, $event)"
+        />
+      </td>
+    </ng-container>
+
+    <tr mat-header-row *matHeaderRowDef="displayedColumns()"></tr>
+    <tr mat-row *matRowDef="let row; columns: displayedColumns()"></tr>
+  </table>
+</div>
+
+<mat-paginator
+  [length]="totalCount()"
+  [pageIndex]="page() - 1"
+  [pageSize]="pageSize()"
+  [pageSizeOptions]="pageSizeOptions"
+  showFirstLastButtons
+  aria-label="Select page of requests"
+  (page)="pageChange.emit($event)"
+/>

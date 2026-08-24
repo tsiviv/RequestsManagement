@@ -1,0 +1,65 @@
+.table-scroll {
+  overflow-x: auto;
+}
+
+.requests-table {
+  width: 100%;
+
+  .mat-mdc-cell,
+  .mat-mdc-header-cell {
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.25rem 0.625rem;
+  border-radius: 1rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+
+  mat-icon {
+    font-size: 1rem;
+    width: 1rem;
+    height: 1rem;
+  }
+
+  &--status-new {
+    background: #e3f2fd;
+    color: #0d47a1;
+  }
+
+  &--status-inprogress {
+    background: #fff8e1;
+    color: #8d5b00;
+  }
+
+  &--status-waiting {
+    background: #f3e5f5;
+    color: #6a1b9a;
+  }
+
+  &--status-completed {
+    background: #e8f5e9;
+    color: #1b5e20;
+  }
+
+  &--priority-low {
+    background: #eceff1;
+    color: #37474f;
+  }
+
+  &--priority-medium {
+    background: #fff3e0;
+    color: #a15200;
+  }
+
+  &--priority-high {
+    background: #ffebee;
+    color: #b71c1c;
+  }
+}

@@ -16,7 +16,7 @@ function toApiError(error: HttpErrorResponse): ApiError {
   if (error.status === 0) {
     return {
       kind: 'network',
-      message: 'Unable to reach the server. Check your connection and try again.',
+      message: 'Unable to connect to the server. Please check your connection.',
       status: null,
     };
   }
@@ -41,13 +41,13 @@ function classify(status: number): ApiErrorKind {
 function defaultMessage(kind: ApiErrorKind): string {
   switch (kind) {
     case 'validation':
-      return 'The request could not be processed. Please check your input.';
+      return 'Please check the entered values.';
     case 'not-found':
-      return 'The requested resource was not found.';
+      return 'The request could not be found.';
     case 'conflict':
-      return 'This request was modified by another user. Please refresh the request and try again.';
+      return 'The request was updated by another user. Please refresh the request before making another change.';
     case 'server':
-      return 'The server encountered an error. Please try again later.';
+      return 'Something went wrong on the server. Please try again.';
     default:
       return 'An unexpected error occurred.';
   }

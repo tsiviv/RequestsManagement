@@ -1,0 +1,61 @@
+.summary {
+  &__state {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem 0;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  &__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 0.75rem;
+    padding: 1rem 0;
+  }
+
+  &__tile {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 1rem 1.25rem;
+    min-width: 0;
+  }
+
+  &__tile--priority {
+    grid-column: 1 / -1;
+  }
+
+  &__value {
+    font-size: 1.75rem;
+    font-weight: 500;
+    line-height: 1.2;
+  }
+
+  &__label {
+    font-size: 0.875rem;
+    color: var(--mat-sys-on-surface-variant);
+  }
+
+  &__priority-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+    margin-top: 0.25rem;
+  }
+
+  &__priority-item {
+    display: flex;
+    flex-direction: column;
+  }
+
+  &__priority-count {
+    font-size: 1.125rem;
+    font-weight: 500;
+  }
+
+  &__priority-name {
+    font-size: 0.75rem;
+    color: var(--mat-sys-on-surface-variant);
+  }
+}
