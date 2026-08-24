@@ -10,5 +10,5 @@ import { MatIconModule } from '@angular/material/icon';
   styleUrl: './app.scss',
 })
 export class App {
-  protected readonly appName = 'Request Management';
+  protected readonly appName = 'ניהול בקשות';
 }

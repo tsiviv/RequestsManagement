@@ -33,11 +33,11 @@ export class RequestSummaryComponent {
       return [];
     }
     return [
-      { label: 'Total Requests', value: summary.total },
-      { label: 'New', value: summary.byStatus.New },
-      { label: 'In Progress', value: summary.byStatus.InProgress },
-      { label: 'Waiting', value: summary.byStatus.Waiting },
-      { label: 'Completed', value: summary.byStatus.Completed },
+      { label: 'סה״כ בקשות', value: summary.total },
+      { label: 'חדש', value: summary.byStatus.New },
+      { label: 'בטיפול', value: summary.byStatus.InProgress },
+      { label: 'ממתין', value: summary.byStatus.Waiting },
+      { label: 'הושלם', value: summary.byStatus.Completed },
     ];
   });
 }

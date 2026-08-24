@@ -1,6 +1,6 @@
 <section class="page-header">
-  <h1>Requests</h1>
-  <p>Manage, search and update incoming requests.</p>
+  <h1>בקשות</h1>
+  <p>ניהול, חיפוש ועדכון של בקשות נכנסות.</p>
 </section>
 
 <app-request-summary
@@ -16,30 +16,30 @@
   @if (loading() && !pagedResult()) {
     <div class="state-panel" role="status">
       <mat-spinner diameter="40" />
-      <p>Loading requests…</p>
+      <p>טוען בקשות…</p>
     </div>
   } @else if (error() && !pagedResult()) {
     <div class="state-panel" role="alert">
-      <p>Unable to load requests.</p>
+      <p>לא ניתן לטעון את הבקשות.</p>
       <p class="state-panel__detail">{{ error()!.message }}</p>
       <button type="button" mat-flat-button color="primary" (click)="reloadRequests()">
-        Try again
+        נסה שוב
       </button>
     </div>
   } @else if (pagedResult(); as result) {
     @if (loading()) {
-      <mat-progress-bar mode="indeterminate" aria-label="Refreshing results" />
+      <mat-progress-bar mode="indeterminate" aria-label="מרענן תוצאות" />
     }
 
     @if (result.items.length === 0) {
       <div class="state-panel">
         @if (isFiltered()) {
-          <p>No requests match your current search and filters.</p>
+          <p>אין בקשות התואמות את החיפוש והמסננים הנוכחיים.</p>
           <button type="button" mat-stroked-button (click)="filtersRef.resetFilters()">
-            Reset filters
+            איפוס מסננים
           </button>
         } @else {
-          <p>No requests available.</p>
+          <p>אין בקשות זמינות.</p>
         }
       </div>
     } @else {
@@ -60,7 +60,7 @@
     @if (error()) {
       <p class="inline-error" role="alert">
         {{ error()!.message }}
-        <button type="button" mat-button (click)="reloadRequests()">Try again</button>
+        <button type="button" mat-button (click)="reloadRequests()">נסה שוב</button>
       </p>
     }
   }

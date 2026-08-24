@@ -198,7 +198,7 @@ describe('RequestsPageComponent', () => {
     flushInitialLoad({ items: [], totalCount: 0, page: 1, pageSize: 25, totalPages: 0 });
 
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
-    expect(text).toContain('No requests available.');
+    expect(text).toContain('אין בקשות זמינות.');
   });
 
   it('shows a filtered empty-state message with a reset action when filters are active', async () => {
@@ -214,7 +214,7 @@ describe('RequestsPageComponent', () => {
     fixture.detectChanges();
 
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
-    expect(text).toContain('No requests match your current search and filters.');
+    expect(text).toContain('אין בקשות התואמות את החיפוש והמסננים הנוכחיים.');
   });
 
   it('shows an error state when loading requests fails', () => {
@@ -225,7 +225,7 @@ describe('RequestsPageComponent', () => {
     fixture.detectChanges();
 
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
-    expect(text).toContain('Something went wrong on the server. Please try again.');
+    expect(text).toContain('משהו השתבש בשרת. אנא נסה שוב.');
   });
 
   it('applies a successful status update to the affected row and refreshes the summary', async () => {

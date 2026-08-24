@@ -1,19 +1,19 @@
-<form class="filters" [formGroup]="form" role="search" aria-label="Search and filter requests">
+<form class="filters" [formGroup]="form" role="search" aria-label="חיפוש וסינון בקשות">
   <mat-form-field appearance="outline" class="filters__search" subscriptSizing="dynamic">
-    <mat-label>Search</mat-label>
+    <mat-label>חיפוש</mat-label>
     <input
       matInput
       formControlName="search"
-      placeholder="Search by title or organization"
+      placeholder="חיפוש לפי כותרת או ארגון"
       autocomplete="off"
     />
     <mat-icon matPrefix aria-hidden="true">search</mat-icon>
   </mat-form-field>
 
   <mat-form-field appearance="outline" class="filters__select" subscriptSizing="dynamic">
-    <mat-label>Status</mat-label>
-    <mat-select formControlName="status" aria-label="Filter by status">
-      <mat-option value="">All statuses</mat-option>
+    <mat-label>סטטוס</mat-label>
+    <mat-select formControlName="status" aria-label="סינון לפי סטטוס">
+      <mat-option value="">כל הסטטוסים</mat-option>
       @for (status of statuses; track status) {
         <mat-option [value]="status">{{ statusLabels[status] }}</mat-option>
       }
@@ -21,9 +21,9 @@
   </mat-form-field>
 
   <mat-form-field appearance="outline" class="filters__select" subscriptSizing="dynamic">
-    <mat-label>Priority</mat-label>
-    <mat-select formControlName="priority" aria-label="Filter by priority">
-      <mat-option value="">All priorities</mat-option>
+    <mat-label>עדיפות</mat-label>
+    <mat-select formControlName="priority" aria-label="סינון לפי עדיפות">
+      <mat-option value="">כל העדיפויות</mat-option>
       @for (priority of priorities; track priority) {
         <mat-option [value]="priority">{{ priorityLabels[priority] }}</mat-option>
       }
@@ -35,9 +35,9 @@
     mat-stroked-button
     class="filters__reset"
     (click)="resetFilters()"
-    aria-label="Reset search and filters"
+    aria-label="איפוס חיפוש ומסננים"
   >
     <mat-icon aria-hidden="true">restart_alt</mat-icon>
-    Reset
+    איפוס
   </button>
 </form>

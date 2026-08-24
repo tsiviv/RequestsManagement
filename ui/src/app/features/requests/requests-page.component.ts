@@ -22,6 +22,7 @@ import {
   RequestStatusChangeEvent,
   RequestsTableComponent,
 } from './components/requests-table/requests-table.component';
+import { REQUEST_STATUS_LABELS } from './models/request.model';
 
 const DEFAULT_QUERY: RequestQuery = {
   page: 1,
@@ -179,12 +180,14 @@ export class RequestsPageComponent {
               }
             : current,
         );
-        this.snackBar.open(`Status updated to ${updated.status}.`, 'Dismiss', { duration: 4000 });
+        this.snackBar.open(`הסטטוס עודכן ל${REQUEST_STATUS_LABELS[updated.status]}.`, 'סגור', {
+          duration: 4000,
+        });
         this.reloadSummary();
       },
       error: (apiError: ApiError) => {
         this.setUpdating(row.id, false);
-        this.snackBar.open(apiError.message, 'Dismiss', { duration: 6000 });
+        this.snackBar.open(apiError.message, 'סגור', { duration: 6000 });
         if (apiError.kind === 'conflict' || apiError.kind === 'not-found') {
           this.reloadRequests();
         }

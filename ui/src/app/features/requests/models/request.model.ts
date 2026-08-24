@@ -12,10 +12,10 @@ export type RequestPriority = 'Low' | 'Medium' | 'High';
 export const REQUEST_PRIORITIES: readonly RequestPriority[] = ['Low', 'Medium', 'High'];
 
 export const REQUEST_STATUS_LABELS: Record<RequestStatus, string> = {
-  New: 'New',
-  InProgress: 'In Progress',
-  Waiting: 'Waiting',
-  Completed: 'Completed',
+  New: 'חדש',
+  InProgress: 'בטיפול',
+  Waiting: 'ממתין',
+  Completed: 'הושלם',
 };
 
 export const REQUEST_STATUS_ICONS: Record<RequestStatus, string> = {
@@ -26,9 +26,9 @@ export const REQUEST_STATUS_ICONS: Record<RequestStatus, string> = {
 };
 
 export const REQUEST_PRIORITY_LABELS: Record<RequestPriority, string> = {
-  Low: 'Low',
-  Medium: 'Medium',
-  High: 'High',
+  Low: 'נמוכה',
+  Medium: 'בינונית',
+  High: 'גבוהה',
 };
 
 export const REQUEST_PRIORITY_ICONS: Record<RequestPriority, string> = {

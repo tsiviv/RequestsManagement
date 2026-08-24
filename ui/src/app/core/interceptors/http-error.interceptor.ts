@@ -16,7 +16,7 @@ function toApiError(error: HttpErrorResponse): ApiError {
   if (error.status === 0) {
     return {
       kind: 'network',
-      message: 'Unable to connect to the server. Please check your connection.',
+      message: 'לא ניתן להתחבר לשרת. אנא בדוק את החיבור שלך.',
       status: null,
     };
   }
@@ -41,14 +41,14 @@ function classify(status: number): ApiErrorKind {
 function defaultMessage(kind: ApiErrorKind): string {
   switch (kind) {
     case 'validation':
-      return 'Please check the entered values.';
+      return 'אנא בדוק את הערכים שהוזנו.';
     case 'not-found':
-      return 'The request could not be found.';
+      return 'הבקשה לא נמצאה.';
     case 'conflict':
-      return 'The request was updated by another user. Please refresh the request before making another change.';
+      return 'הבקשה עודכנה על ידי משתמש אחר. אנא רענן את הבקשה לפני ביצוע שינוי נוסף.';
     case 'server':
-      return 'Something went wrong on the server. Please try again.';
+      return 'משהו השתבש בשרת. אנא נסה שוב.';
     default:
-      return 'An unexpected error occurred.';
+      return 'אירעה שגיאה בלתי צפויה.';
   }
 }
