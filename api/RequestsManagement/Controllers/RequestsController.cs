@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using RequestsManagement.DTOs;
 using RequestsManagement.DTOs.Common;
-using RequestsManagement.Services.Interfaces;
+using RequestsManagement.Services;
 
 namespace RequestsManagement.Controllers;
 

@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using RequestsManagement.Models;
 
-namespace RequestsManagement.Data.Configurations;
+namespace RequestsManagement.Data;
 
 public class RequestConfiguration : IEntityTypeConfiguration<RequestEntity>
 {

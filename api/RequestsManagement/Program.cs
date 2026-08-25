@@ -1,7 +1,6 @@
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 using RequestsManagement.Data;
-using RequestsManagement.Data.Seeding;
 using RequestsManagement.Extensions;
 using RequestsManagement.Middleware;
 

@@ -4,7 +4,6 @@ using RequestsManagement.DTOs;
 using RequestsManagement.DTOs.Common;
 using RequestsManagement.Exceptions;
 using RequestsManagement.Models;
-using RequestsManagement.Services.Interfaces;
 
 namespace RequestsManagement.Services;
 

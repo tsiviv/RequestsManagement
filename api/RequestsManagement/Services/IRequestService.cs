@@ -1,7 +1,7 @@
 using RequestsManagement.DTOs;
 using RequestsManagement.DTOs.Common;
 
-namespace RequestsManagement.Services.Interfaces;
+namespace RequestsManagement.Services;
 
 public interface IRequestService
 {

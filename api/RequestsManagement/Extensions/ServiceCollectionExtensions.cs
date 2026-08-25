@@ -1,5 +1,4 @@
 using RequestsManagement.Services;
-using RequestsManagement.Services.Interfaces;
 
 namespace RequestsManagement.Extensions;
 

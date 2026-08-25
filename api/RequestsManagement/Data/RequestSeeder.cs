@@ -3,7 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using RequestsManagement.Enums;
 using RequestsManagement.Models;
 
-namespace RequestsManagement.Data.Seeding;
+namespace RequestsManagement.Data;
 
 public static class RequestSeeder
 {
