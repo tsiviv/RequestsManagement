@@ -67,9 +67,27 @@ public static class RequestSeeder
         [RequestPriority.Low, RequestPriority.Medium, RequestPriority.High];
     private static readonly float[] PriorityWeights = [0.40f, 0.40f, 0.20f];
 
-    public static async Task SeedAsync(AppDbContext context, ILogger logger, CancellationToken cancellationToken = default)
+    /// <summary>
+    /// Seeds the test data set when the table is empty. With <paramref name="reset"/>, existing
+    /// requests (and, via cascade, their history) are deleted first so the data set is recreated.
+    /// Runs in one transaction so a failure never leaves a partially seeded table behind.
+    /// </summary>
+    public static async Task SeedAsync(AppDbContext context, ILogger logger, bool reset = false, CancellationToken cancellationToken = default)
     {
-        if (await context.Requests.AnyAsync(cancellationToken))
+        await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
+
+        if (reset)
+        {
+            var deleted = await context.Requests.ExecuteDeleteAsync(cancellationToken);
+            if (deleted > 0)
+            {
+                // Restart Ids at 1 so a recreated data set has the same Ids as a fresh one.
+                // Only after a delete: on a never-used table RESEED 0 would make the next Id 0.
+                await context.Database.ExecuteSqlRawAsync("DBCC CHECKIDENT ('Requests', RESEED, 0);", cancellationToken);
+            }
+            logger.LogWarning("Reseed requested: deleted {Count} existing requests", deleted);
+        }
+        else if (await context.Requests.AnyAsync(cancellationToken))
         {
             return;
         }
@@ -103,6 +121,7 @@ public static class RequestSeeder
             context.ChangeTracker.AutoDetectChangesEnabled = true;
         }
 
+        await transaction.CommitAsync(cancellationToken);
         logger.LogInformation("Seeded {Count} requests in {ElapsedMs} ms", RecordCount, stopwatch.ElapsedMilliseconds);
     }
 }

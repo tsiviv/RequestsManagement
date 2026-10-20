@@ -35,7 +35,8 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
-    await RequestSeeder.SeedAsync(db, app.Logger);
+    // `dotnet run -- --reseed` recreates the test data set from scratch.
+    await RequestSeeder.SeedAsync(db, app.Logger, reset: args.Contains("--reseed"));
 }
 
 // Configure the HTTP request pipeline.
