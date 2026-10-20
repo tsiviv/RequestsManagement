@@ -9,4 +9,7 @@ namespace RequestsManagement.Services;
 public interface IRequestSummaryCache
 {
     Task<RequestSummaryDto> GetOrCreateAsync(Func<CancellationToken, Task<RequestSummaryDto>> factory, CancellationToken cancellationToken);
+
+    /// <summary>Call after any committed change that affects the aggregations (status changes, reseed).</summary>
+    void Invalidate();
 }

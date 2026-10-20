@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore.Diagnostics;
 using RequestsManagement.Data;
 using RequestsManagement.Extensions;
 using RequestsManagement.Middleware;
+using RequestsManagement.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -42,6 +43,9 @@ using (var scope = app.Services.CreateScope())
     await db.Database.MigrateAsync();
     // `dotnet run -- --reseed` recreates the test data set from scratch.
     await RequestSeeder.SeedAsync(db, app.Logger, reset: args.Contains("--reseed"));
+    // A no-op for the in-process cache (empty at startup), but required once the cache is shared
+    // between instances (Redis): other servers would otherwise keep serving pre-reseed numbers.
+    scope.ServiceProvider.GetRequiredService<IRequestSummaryCache>().Invalidate();
 }
 
 // Configure the HTTP request pipeline.

@@ -309,6 +309,11 @@ public class RequestService(
             return false;
         }
 
+        // After the commit, never before: invalidating earlier would let a concurrent reader cache the
+        // pre-change numbers again. Per change (not once per bulk call), so items that committed
+        // before a bulk call fails midway are still reflected.
+        summaryCache.Invalidate();
+
         // ChangedBy is deliberately not logged: it is personal data and already lives in the audit table.
         logger.LogInformation("Request {RequestId} status changed from {PreviousStatus} to {NewStatus}",
             entity.Id, previousStatus, status);

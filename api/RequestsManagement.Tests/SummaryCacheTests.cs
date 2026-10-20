@@ -76,6 +76,114 @@ public class SummaryCacheTests
         Assert.Equal(2, calls);
     }
 
+    // --- Invalidation ------------------------------------------------------------
+
+    [Fact]
+    public async Task SingleUpdate_InvalidatesSummary_SoTheNextReadIsFresh()
+    {
+        var (dbName, id, rowVersion) = await SeedOneAsync(RequestStatus.New);
+        var cache = CreateSummaryCache();
+        Assert.Equal(1, (await GetSummaryAsync(dbName, cache)).ByStatus["New"]);
+
+        await using (var context = CreateContext(dbName))
+        {
+            await CreateService(context, summaryCache: cache).UpdateStatusAsync(id,
+                new UpdateRequestStatusDto { Status = RequestStatus.InProgress, RowVersion = rowVersion });
+        }
+
+        var summary = await GetSummaryAsync(dbName, cache);
+        Assert.Equal(0, summary.ByStatus["New"]);
+        Assert.Equal(1, summary.ByStatus["InProgress"]);
+    }
+
+    [Fact]
+    public async Task BulkUpdate_WithAnUpdatedItem_InvalidatesSummary()
+    {
+        var (dbName, id, rowVersion) = await SeedOneAsync(RequestStatus.New);
+        var cache = CreateSummaryCache();
+        await GetSummaryAsync(dbName, cache);
+
+        await using (var context = CreateContext(dbName))
+        {
+            await CreateService(context, summaryCache: cache).BulkUpdateStatusAsync(new BulkUpdateStatusDto
+            {
+                Status = RequestStatus.InProgress,
+                Items = [new() { Id = id, RowVersion = rowVersion }, new() { Id = 999, RowVersion = rowVersion }]
+            });
+        }
+
+        Assert.Equal(1, (await GetSummaryAsync(dbName, cache)).ByStatus["InProgress"]);
+    }
+
+    [Fact]
+    public async Task FailedUpdates_DoNotInvalidate()
+    {
+        // Nothing changed, so there is nothing to invalidate; proven by a row added behind the
+        // cache's back staying invisible after the failed single and bulk updates.
+        var (dbName, id, _) = await SeedOneAsync(RequestStatus.New);
+        var cache = CreateSummaryCache();
+        Assert.Equal(1, (await GetSummaryAsync(dbName, cache)).Total);
+        await AddRequestAsync(dbName);
+        var stale = Convert.ToBase64String(BitConverter.GetBytes(99L));
+
+        await using (var context = CreateContext(dbName))
+        {
+            var service = CreateService(context, summaryCache: cache);
+            await Assert.ThrowsAsync<RequestsManagement.Exceptions.ConcurrencyConflictException>(() =>
+                service.UpdateStatusAsync(id, new UpdateRequestStatusDto { Status = RequestStatus.InProgress, RowVersion = stale }));
+            var bulk = await service.BulkUpdateStatusAsync(new BulkUpdateStatusDto
+            {
+                Status = RequestStatus.InProgress,
+                Items = [new() { Id = id, RowVersion = stale }]
+            });
+            Assert.Equal(0, bulk.Updated);
+        }
+
+        Assert.Equal(1, (await GetSummaryAsync(dbName, cache)).Total);
+    }
+
+    [Fact]
+    public async Task ChangeCommittedWhileSummaryIsBeingComputed_StaleResultIsNotServedAfterwards()
+    {
+        // Reader starts computing from pre-change data; meanwhile a writer commits and invalidates.
+        // The reader's stale result must not become the cached value for later readers.
+        var cache = CreateSummaryCache();
+        var calls = 0;
+
+        var first = await cache.GetOrCreateAsync(_ =>
+        {
+            calls++;
+            cache.Invalidate(); // the concurrent writer's commit + invalidation
+            return Task.FromResult(new RequestSummaryDto { Total = 1 });
+        }, CancellationToken.None);
+
+        var second = await cache.GetOrCreateAsync(_ =>
+        {
+            calls++;
+            return Task.FromResult(new RequestSummaryDto { Total = 2 });
+        }, CancellationToken.None);
+
+        Assert.Equal(1, first.Total);   // the in-flight caller gets what it computed
+        Assert.Equal(2, second.Total);  // but later callers recompute instead of reading it
+        Assert.Equal(2, calls);
+    }
+
+    private static async Task<RequestSummaryDto> GetSummaryAsync(string dbName, IRequestSummaryCache cache)
+    {
+        await using var context = CreateContext(dbName);
+        return await CreateService(context, summaryCache: cache).GetSummaryAsync();
+    }
+
+    private static async Task<(string DbName, int Id, string RowVersion)> SeedOneAsync(RequestStatus status)
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using var context = CreateContext(dbName);
+        var entity = NewRequest("R", "Org", status, RequestPriority.Low, DateTime.UtcNow);
+        context.Requests.Add(entity);
+        await context.SaveChangesAsync();
+        return (dbName, entity.Id, Convert.ToBase64String(entity.RowVersion));
+    }
+
     private sealed class FakeClock : ISystemClock
     {
         public DateTimeOffset UtcNow { get; private set; } = new(2026, 10, 20, 12, 0, 0, TimeSpan.Zero);
