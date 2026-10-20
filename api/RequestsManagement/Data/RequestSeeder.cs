@@ -41,6 +41,13 @@ public static class RequestSeeder
         "אל על נתיבי אוויר לישראל", "פרטנר תקשורת", "סלקום ישראל"
     ];
 
+    private static readonly string[] Assignees =
+    [
+        "דנה כהן", "יוסי לוי", "מיכל אברהם", "אבי מזרחי", "נועה פרידמן",
+        "רון ביטון", "שירה גולן", "עומר שפירא", "תמר אזולאי", "איתי רוזן",
+        "הילה דהן", "גיל אוחיון", "ליאת ברק", "אלון חדד", "מאיה נחום"
+    ];
+
     public static async Task SeedAsync(AppDbContext context, CancellationToken cancellationToken = default)
     {
         if (await context.Requests.AnyAsync(cancellationToken))
@@ -56,6 +63,7 @@ public static class RequestSeeder
         var faker = new Faker<RequestEntity>()
             .RuleFor(r => r.Title, f => $"{f.PickRandom(RequestTypes)} - {f.PickRandom(RequestSubjects)}")
             .RuleFor(r => r.OrganizationName, f => f.PickRandom(OrganizationNames))
+            .RuleFor(r => r.AssignedTo, f => f.PickRandom(Assignees))
             .RuleFor(r => r.Status, f => f.PickRandom(statuses))
             .RuleFor(r => r.Priority, f => f.PickRandom(priorities))
             .RuleFor(r => r.CreatedAt, f => f.Date.Between(AnchorDate.AddMonths(-18), AnchorDate))

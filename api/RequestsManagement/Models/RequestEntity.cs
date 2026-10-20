@@ -7,6 +7,7 @@ public class RequestEntity
     public int Id { get; set; }
     public required string Title { get; set; }
     public required string OrganizationName { get; set; }
+    public required string AssignedTo { get; set; }
     public RequestStatus Status { get; set; }
     public RequestPriority Priority { get; set; }
     public DateTime CreatedAt { get; set; }

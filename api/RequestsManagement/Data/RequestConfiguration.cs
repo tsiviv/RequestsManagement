@@ -20,6 +20,10 @@ public class RequestConfiguration : IEntityTypeConfiguration<RequestEntity>
             .IsRequired()
             .HasMaxLength(200);
 
+        builder.Property(r => r.AssignedTo)
+            .IsRequired()
+            .HasMaxLength(100);
+
         builder.Property(r => r.Status)
             .IsRequired()
             .HasConversion<int>();

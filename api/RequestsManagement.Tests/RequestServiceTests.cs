@@ -21,6 +21,7 @@ public class RequestServiceTests
         {
             Title = title,
             OrganizationName = org,
+            AssignedTo = "Handler",
             Status = status,
             Priority = priority,
             CreatedAt = createdAt,
