@@ -1,581 +1,288 @@
 # Requests Management
 
-אפליקציית ניהול בקשות ארגוניות: API מסוג ASP.NET Core REST עם ממשק Angular, מול בסיס נתונים SQL Server. המערכת תומכת בחיפוש, סינון, מיון ודפדוף בין בקשות, הצגת סיכום נתונים, ועדכון סטטוס של בקשה בצורה בטוחה גם כשכמה אנשים עשויים לערוך אותה בו-זמנית.
+מערכת לניהול פניות מארגונים: REST API ב-ASP.NET Core מול SQL Server, וממשק Angular. משתמשים רבים יכולים במקביל לאתר פניות, לסנן, למיין, לעדכן סטטוס (בודד או Bulk), לצפות בהיסטוריית השינויים ובנתונים מסכמים, על 100,000 רשומות.
 
-> **הערה לגבי הקוד הקיים:** חלק מהקוד היה קיים עוד לפני תחילת המבדק הנוכחי. בעבר ניגשתי למשרה במשרד להגנת הסביבה, ובמבדק שם ניתן אותו בסיס פרויקט. השתמשתי בבסיס הזה כנקודת מוצא, והמבדק הנוכחי נבנה מעליו (פירוט הפערים שהושלמו מופיע ב-[docs/WORK_PLAN.md](docs/WORK_PLAN.md)).
+> **הערה לגבי הקוד הקיים:** חלק מהקוד היה קיים לפני תחילת המבדק. בעבר ניגשתי למשרה במשרד להגנת הסביבה, ובמבדק שם ניתן אותו בסיס פרויקט. השתמשתי בו כנקודת מוצא, והמבדק הנוכחי נבנה מעליו. ניתוח הפערים שהושלמו מופיע ב-[docs/WORK_PLAN.md](docs/WORK_PLAN.md).
 
-## לבודקים: התחלה מהירה
+**מסמכים:**
+- [docs/WORK_PLAN.md](docs/WORK_PLAN.md): תכנון העבודה. פירוק לפיצ'רים ולמשימות, תלויות, סדר ביצוע, הערכות מאמץ, ומה השתנה בביצוע.
+- [docs/PERFORMANCE.md](docs/PERFORMANCE.md): מדידת ביצועים על 100,000 רשומות. Execution Plans, אינדקסים, Bottlenecks ושיפורים.
+
+## טכנולוגיות וגרסאות
+
+| שכבה | טכנולוגיה |
+|---|---|
+| Backend | .NET 9, ASP.NET Core Web API, EF Core 9.0.9 |
+| בסיס נתונים | SQL Server (ברירת מחדל: LocalDB) |
+| Frontend | Angular 21.2, Angular Material 21.2, RxJS 7.8, TypeScript 5.9 |
+| בדיקות | xUnit 2.9 + `WebApplicationFactory`, Vitest 4 |
+| נתוני בדיקה / תיעוד API | Bogus 35.6 / Swagger (Swashbuckle 6.6) |
+
+## הרצה
+
+**דרישות מקדימות:**
+- .NET 9 SDK.
+- Node.js 20.19+ או 22.12+ (דרישה של Angular 21).
+- SQL Server LocalDB (Windows). על מערכות אחרות, ראו "SQL Server אחר" בהמשך.
 
 ```bash
-# 1. API (מריץ migrations ו-seeding של 100,000 רשומות בעלייה הראשונה, כחצי דקה עד דקה)
-cd api/RequestsManagement && dotnet run --launch-profile http     # http://localhost:5088/swagger
+# 1. API: בעלייה הראשונה מריץ migrations ויוצר 100,000 רשומות (כחצי דקה עד דקה)
+cd api/RequestsManagement
+dotnet run --launch-profile http          # http://localhost:5088/swagger
 
-# 2. ממשק (בטרמינל נוסף)
-cd ui && npm install && npm start                                  # http://localhost:4200
+# 2. ממשק, בטרמינל נוסף
+cd ui
+npm install
+npm start                                 # http://localhost:4200
 
 # 3. בדיקות
-cd api && dotnet test                  # Unit + Integration מול SQL Server (LocalDB)
-cd ui && npx ng test --watch=false     # Angular
+cd api && dotnet test                     # Unit + Integration (מול SQL Server)
+cd ui && npx ng test --watch=false        # Angular
 ```
 
-בממשק, הזינו שם בשדה שבראש העמוד לפני עדכון סטטוס. השם נרשם בהיסטוריית השינויים.
+- **שם משתמש:** לפני עדכון סטטוס בממשק יש להזין שם בשדה שבראש העמוד. השם נרשם כ-`ChangedBy` בהיסטוריה.
+- **Swagger:** הכותרת `X-User-Name` מופיעה עם ערך ברירת מחדל, ואפשר לנסות את העדכונים ישירות.
+- **דוגמאות מוכנות:** [RequestsManagement.http](api/RequestsManagement/RequestsManagement.http).
 
-**איפה כל דרישה מכוסה:**
+**יצירה חוזרת של נתוני הבדיקה:**
+- הפקודה: `dotnet run --launch-profile http -- --reseed`.
+- מה היא עושה: מוחקת את כל הפניות ואת ההיסטוריה שלהן, ויוצרת מחדש את אותן 100,000 רשומות בדיוק (seed ותאריך קבועים).
+- הכל בטרנזקציה אחת: אם הפעולה נכשלת באמצע, הנתונים הקודמים נשארים.
 
-| סעיף באפיון | מימוש עיקרי | תיעוד |
-|---|---|---|
-| מבנה פנייה, 100K רשומות, יצירה חוזרת | `Models/`, `Data/RequestSeeder.cs` | [Database ו-Seeding](#database-ו-seeding) |
-| 1. שליפה: Pagination, סינון, חיפוש, מיון, Aggregations, Validation | `Services/RequestService.cs`, `DTOs/RequestQueryDto.cs` | [API מרכזיים](#api-מרכזיים), [שליפת נתונים](#שליפת-נתונים-מניעת-טעינה-לזיכרון-ואינדקסים), [מיון](#מיון) |
-| 2. עדכון סטטוס ותחרותיות | `RequestService.UpdateStatusAsync`, `Policies/StatusTransitionPolicy.cs` | [Concurrency ומניעת Lost Update](#concurrency-ומניעת-lost-update) |
-| 3. היסטוריית שינויים | `Models/RequestStatusHistoryEntity.cs`, `GET /api/requests/{id}/history` | [API מרכזיים](#api-מרכזיים) |
-| 4. Bulk | `RequestService.BulkUpdateStatusAsync` | [עדכון סטטוס Bulk – חוזה](#עדכון-סטטוס-bulk--חוזה) |
-| 5. Angular | `ui/src/app/features/requests/` | [Angular](#angular-ארכיטקטורה-ועבודה-מול-ה-api) |
-| 6. ביצועים | `docs/perf/*.sql` | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) |
-| 7. Cache | `Services/MemoryRequestSummaryCache.cs` | [Cache](#cache) |
-| 8. בדיקות אוטומטיות | `api/*.Tests`, `api/*.IntegrationTests`, `ui/**/*.spec.ts` | [בדיקות](#בדיקות) |
-| 9. תכנון עבודה | – | [docs/WORK_PLAN.md](docs/WORK_PLAN.md) |
-| 10. איכות קוד | – | [מבנה הפרויקט](#מבנה-הפרויקט), [טיפול בשגיאות ו-Logging](#טיפול-בשגיאות-ו-logging), [docs/REVIEW.md](docs/REVIEW.md) |
-| 11. תיעוד: החלטות, מגבלה ושיפור, AI | – | [החלטות טכנולוגיות](#החלטות-טכנולוגיות-וחלופות), [מגבלות ידועות](#מגבלות-ידועות), [שימוש ב-AI](#שימוש-ב-ai) |
-
-**מסמכים נוספים:**
-- [docs/WORK_PLAN.md](docs/WORK_PLAN.md): ניתוח הפערים, החלטות התכנון, חלוקה ל-Features ו-Tasks, תלויות, סדר ביצוע והערכות מאמץ.
-- [docs/PERFORMANCE.md](docs/PERFORMANCE.md): מדידות ביצועים על 100,000 רשומות, Execution Plans, אינדקסים, Bottlenecks ושיפורים.
-- [docs/REVIEW.md](docs/REVIEW.md): הבדיקות הסופיות, מטריצת עמידה בדרישות והממצאים שתוקנו.
-
-## טכנולוגיות
-
-| שכבה | טכנולוגיה וגרסה |
-|---|---|
-| Backend | .NET 9 (`net9.0`), ASP.NET Core Web API, EF Core 9.0.9 |
-| בסיס נתונים | SQL Server (LocalDB 2019) |
-| Frontend | Angular 21.2, Angular Material 21.2, RxJS 7.8, TypeScript 5.9 |
-| בדיקות | xUnit 2.9 + `WebApplicationFactory` (Backend), Vitest 4 (Frontend) |
-| נתוני בדיקה | Bogus 35.6 |
-| תיעוד API | Swagger (Swashbuckle 6.6) |
-
-## דרישות מקדימות
-
-- .NET 9 SDK
-- SQL Server LocalDB (מגיע עם Visual Studio, או כהתקנה נפרדת של SQL Server Express LocalDB)
-- Node.js בגרסה 20.19 ומעלה או 22.12 ומעלה (דרישה של Angular 21), ו-npm
-
-## איך מריצים
-
-### Backend
+**SQL Server אחר (Mac / Linux / Docker):** כל SQL Server מתאים. מעבירים connection string דרך משתנה סביבה, בלי שינוי קוד:
 
 ```bash
-cd api/RequestsManagement
-dotnet restore
-dotnet run --launch-profile http
+# לדוגמה, SQL Server ב-Docker:
+docker run -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD='Your_str0ng_Pass' -p 1433:1433 -d mcr.microsoft.com/mssql/server:2022-latest
+
+export ConnectionStrings__DefaultConnection='Server=localhost,1433;Database=RequestsManagement;User Id=sa;Password=Your_str0ng_Pass;TrustServerCertificate=True'
+export REQUESTS_IT_SQLSERVER='Server=localhost,1433;User Id=sa;Password=Your_str0ng_Pass;TrustServerCertificate=True'   # לבדיקות האינטגרציה
 ```
 
-- API: `http://localhost:5088`
-- Swagger: `http://localhost:5088/swagger`
+## מבנה הפתרון
 
-ה-migrations וה-seeding מתבצעים אוטומטית עם עליית האפליקציה — אין צורך בשלב ידני נוסף.
-
-### Frontend
-
-מתוך `ui/`:
-
-```bash
-npm install
-npm start
+```
+api/RequestsManagement/                ה-API
+  Controllers/   נקודות קצה דקות: מקבלות קלט ומחזירות את תוצאת ה-Service
+  Services/      לוגיקה: שליפה, עדכון בודד ו-Bulk, היסטוריה, Cache, זיהוי המשתמש
+  Policies/      כללי מעברי הסטטוס: מקור אמת יחיד
+  DTOs/ Mapping/ חוזה ה-API ומיפוי יחיד Entity→DTO (Projection שמתורגם ל-SQL)
+  Models/ Data/  ישויות, הגדרות EF ואינדקסים, Seeding, Migrations
+  Middleware/    טיפול מרוכז בשגיאות (ProblemDetails)
+  Extensions/    רישום DI, הודעות ולידציה בעברית, תיעוד הכותרת ב-Swagger
+api/RequestsManagement.Tests/              בדיקות Unit
+api/RequestsManagement.IntegrationTests/   בדיקות Integration מול SQL Server
+ui/src/app/
+  core/                interceptors (שגיאות HTTP, שם המשתמש), שם המשתמש
+  features/requests/   ה-Service היחיד שפונה ל-API, הדף שמחזיק את המצב, וקומפוננטות תצוגה
 ```
 
-- אפליקציה: `http://localhost:4200`
-- ממשק המשתמש כולו בעברית, בפריסת RTL.
-- **לפני עדכון סטטוס יש להזין שם בשדה שבראש העמוד.** השם נשמר בדפדפן ונרשם כ-`ChangedBy` בהיסטוריית השינויים (אין מערכת התחברות, ראו "מגבלות ידועות").
-- ב-Swagger, פעולות העדכון כוללות את הכותרת `X-User-Name` עם ערך ברירת מחדל, כך שאפשר לנסות אותן ישירות.
+**עקרונות:**
+- **Backend:**
+  - DI עם Lifetimes מתאימים: Service ו-DbContext ב-Scoped, ה-Cache ב-Singleton.
+  - Async ו-`CancellationToken` עד בסיס הנתונים.
+  - טיפול מרוכז בשגיאות ב-Middleware אחד. `500` מחזיר הודעה כללית, בלי Stack Trace.
+- **Logging:**
+  - נקודות משמעותיות: שינוי סטטוס, קונפליקט, סיכום Bulk, Seeding.
+  - בלי מידע רגיש: שם המשתמש וערכי Header לא נרשמים, ותווי בקרה מוחלפים כדי למנוע זיוף שורות לוג.
+- **Angular:**
+  - `switchMap` מבטל בקשה קודמת כשהשאילתה משתנה, ו-debounce של 300 ms לחיפוש.
+  - מצבי Loading, Empty ו-Error.
+  - `409` מוסבר למשתמש, והעמוד נטען מחדש.
 
-## Database ו-Seeding
+## בסיס הנתונים והאינדקסים
 
-### בחירת בסיס הנתונים: SQL Server
-
-הנתונים כאן הם רשומות במבנה קבוע (פנייה ושורות היסטוריה שלה), והדרישות המרכזיות הן עקביות תחת עדכונים מקבילים, סינון ומיון משולבים ו-Aggregations. SQL Server נותן את כל אלה כיכולות מובנות:
-- **`rowversion` מובנה:** בסיס הנתונים עצמו מעלה את הגרסה בכל עדכון, וה-`UPDATE ... WHERE RowVersion = @rv` אוכף את ה-Optimistic Concurrency בצד ה-DB ולא רק בקוד.
-- **טרנזקציה אחת לשינוי הסטטוס ולשורת ה-Audit:** אין מצב של שינוי בלי היסטוריה, או היסטוריה בלי שינוי.
-- **אינדקסים מורכבים ו-Execution Plans:** תומכים ישירות בתרחישי הסינון והמיון, וכלי המדידה (`STATISTICS IO`, Plans) זמינים לבדיקת הביצועים.
-- **LocalDB:** הבודק מריץ בלי התקנת שרת או Docker, וה-migrations וה-seeding רצים אוטומטית.
+**למה SQL Server:**
+- **`rowversion` מובנה:** בסיס הנתונים עצמו אוכף Optimistic Concurrency (`UPDATE ... WHERE RowVersion = @rv`).
+- **טרנזקציה אחת:** לשינוי הסטטוס ולשורת ה-Audit שלו.
+- **אינדקסים מורכבים ו-Execution Plans:** לסינון, למיון ולמדידה.
+- **LocalDB:** הרצה בלי התקנת שרת.
 
 **חלופות שנשקלו:**
-- **MongoDB:**
-  - Concurrency היה דורש שדה גרסה שמנוהל ידנית בכל עדכון.
-  - טרנזקציה בין מסמך הפנייה למסמך ההיסטוריה דורשת Replica Set.
-  - למבנה קבוע ורלציוני (פנייה → שינויים) אין כאן יתרון למודל מסמכים.
-- **PostgreSQL:** מתאים באותה מידה (עם `xmin` כגרסת שורה). SQL Server נבחר בגלל LocalDB, שמאפשר הרצה בלי התקנה על Windows, ובגלל ההתאמה לסביבה ארגונית מבוססת .NET.
+- **MongoDB:** Concurrency דרך שדה גרסה ידני, וטרנזקציה בין מסמכים דורשת Replica Set. אין כאן יתרון למודל מסמכים, כי המבנה קבוע ורלציוני.
+- **PostgreSQL:** מתאים באותה מידה, עם `xmin`. LocalDB הכריע.
 
-### Seeding
+**איך נמנעת טעינה של כל הנתונים לזיכרון:**
+- **כל העבודה ב-SQL:** כל פילטר, מיון ודפדוף מצטרפים ל-`IQueryable` ומתורגמים ל-`WHERE` / `ORDER BY` / `OFFSET-FETCH` עם פרמטרים.
+- **רק העמוד מגיע לזיכרון:** לכל היותר 100 שורות, ורק עמודות ה-DTO (Projection, `AsNoTracking`).
+- **הספירה:** `COUNT` בבסיס הנתונים. בלי פילטרים, הסה"כ נלקח מה-Summary שב-Cache.
+- **Aggregations:** `GROUP BY` בבסיס הנתונים, כך שחוזרות 7 שורות.
 
-- משתמש ב-SQL Server LocalDB.
-- עם עליית האפליקציה, היא מריצה את כל ה-migrations הממתינים של EF Core, ולאחר מכן מבצעת seeding אם בסיס הנתונים ריק.
-- ה-seeding יוצר 100,000 רשומות דטרמיניסטיות — נעשה שימוש ב-seed קבוע ובתאריך קבוע במקום ערכים אקראיים, כך שהנתונים זהים בכל מכונה ובכל הרצה (בעלייה הראשונה, על מסד חדש: כחצי דקה עד דקה, תלוי במחשב; נמדד 11–69 שניות).
-- ההתפלגות מכוונת להיות מציאותית ולא אחידה: כ-200 ארגונים, 15 מטפלים, רוב הפניות בסטטוס Completed ומיעוטן בעדיפות High — כך שסינונים נפוצים סלקטיביים כמו במערכת אמיתית.
-- ה-seeding בודק תחילה אם כבר קיימים נתונים, כך שהרצה חוזרת של האפליקציה לעולם לא יוצרת כפילויות.
+**האינדקסים:** העמודה המובילה היא זו שמסננים לפיה בשוויון, והשנייה היא סדר המיון. כך אותו אינדקס משמש ל-Seek, לטווח ולסדר, ובלי Sort.
 
-### יצירה חוזרת של נתוני הבדיקה
+| אינדקס | תרחיש |
+|---|---|
+| `(Status, CreatedAt)` | סינון לפי סטטוס, החדשים קודם. `GROUP BY Status` |
+| `(Priority, CreatedAt)` | סינון ומיון לפי עדיפות. `GROUP BY Priority` |
+| `(AssignedTo, CreatedAt)` | "התור של מטפל", מטפל + טווח תאריכים |
+| `(OrganizationName, CreatedAt)` | סינון ומיון לפי ארגון |
+| `(CreatedAt)` | רשימת ברירת המחדל, טווח תאריכים |
+| `(UpdatedAt)` | מיון לפי עדכון אחרון |
+| `RequestStatusHistory (RequestId, ChangedAt)` | היסטוריית פנייה, מהחדש לישן |
 
-```bash
-cd api/RequestsManagement
-dotnet run --launch-profile http -- --reseed
-```
+**ההשפעה:** תרחישי הסינון והמיון הנפוצים ירדו מסריקה של כל הטבלה (2,539 עמודים, עד 1.4 שניות) ל-17–386 עמודים ו-2–5 ms. פירוט ב-[docs/PERFORMANCE.md](docs/PERFORMANCE.md).
 
-הפקודה מוחקת את כל הפניות (וההיסטוריה שלהן, באמצעות cascade), מאפסת את המזהים ל-1 ויוצרת מחדש את אותן 100,000 רשומות בדיוק. כל התהליך רץ בטרנזקציה אחת — אם הוא נכשל באמצע, הנתונים הקודמים נשארים. לאחר מכן האפליקציה ממשיכה לעלות כרגיל.
+## API
 
-## מבנה הפרויקט
+| Endpoint | תיאור |
+|---|---|
+| `GET /api/requests` | רשימה מדופדפת, מסוננת וממוינת |
+| `GET /api/requests/summary` | Aggregations: סה"כ, לפי סטטוס ולפי עדיפות |
+| `GET /api/requests/filter-options` | הארגונים והמטפלים הקיימים, לרשימות הבחירה בסינון |
+| `PATCH /api/requests/{id}/status` | עדכון סטטוס, עם `rowVersion` |
+| `GET /api/requests/{id}/history` | היסטוריית שינויי הסטטוס, מהחדש לישן |
+| `POST /api/requests/status/bulk` | עדכון סטטוס של עד 100 פניות |
 
-```
-api/
-  RequestsManagement/                 ה-API
-  RequestsManagement.Tests/           בדיקות Unit (EF InMemory)
-  RequestsManagement.IntegrationTests/ בדיקות Integration (WebApplicationFactory + SQL Server)
-ui/                                   Angular
-docs/                                 תכנון, ביצועים, בדיקות סופיות; docs/perf/ – סקריפטי המדידה
-```
-
-Backend (`api/RequestsManagement/`):
-
-- `Controllers/`: נקודות הקצה של ה-HTTP. דקות: מקבלות קלט ומחזירות את תוצאת ה-Service.
-- `Services/`:
-  - הלוגיקה העסקית: סינון, מיון, Aggregation, עדכוני סטטוס (בודד ו-Bulk) והיסטוריה.
-  - זיהוי המשתמש (`ICurrentUser`).
-  - Cache ל-Summary (`IRequestSummaryCache`).
-- `Policies/`: כללי מעברי הסטטוס (`StatusTransitionPolicy`), מקור אמת יחיד לעדכון בודד ול-Bulk.
-- `DTOs/`: מבני הבקשה והתגובה, עם ולידציה.
-- `Mapping/`: מיפוי יחיד Entity→DTO. Expression שמתורגם ל-SQL, וגרסה מקומפלת לאובייקטים בזיכרון.
-- `Models/`: ישויות EF Core.
-- `Data/`: DbContext, הגדרת הישויות והאינדקסים, Seeding.
-- `Migrations/`: היסטוריית הסכמה.
-- `Enums/`: ערכי סטטוס, עדיפות ותוצאות Bulk, ושמות הסטטוסים בעברית.
-- `Exceptions/`, `Middleware/`: טיפול מרוכז בשגיאות.
-- `Extensions/`:
-  - רישום השירותים ב-DI.
-  - הודעות הוולידציה של ASP.NET בעברית.
-  - תיעוד הכותרת `X-User-Name` ב-Swagger.
-
-Frontend (`ui/src/app/`):
-
-- `core/interceptors/`: טיפול מרוכז בשגיאות HTTP, והוספת שם המשתמש לבקשות שמשנות נתונים.
-- `core/user/`: שם המשתמש (נשמר בדפדפן) והשדה שלו בסרגל העליון.
-- `core/i18n/`: תרגום ה-Paginator לעברית.
-- `shared/models/`: טיפוסים משותפים לכל הפיצ'רים.
-- `features/requests/`: פיצ'ר הבקשות. ה-Service, הדף שמחזיק את המצב, והקומפוננטות שמציגות בלבד.
-
-## API מרכזיים
-
-- `GET /api/requests` — רשימת בקשות מדופדפת, מסוננת וממוינת
-- `GET /api/requests/summary` — סה"כ ספירות לפי סטטוס ועדיפות
-- `PATCH /api/requests/{id}/status` — עדכון סטטוס של בקשה
-- `GET /api/requests/filter-options` — רשימות הארגונים והמטפלים הקיימים (Distinct, ממוין), כדי שסינוני ההתאמה המדויקת יוצגו כרשימת בחירה ולא כטקסט חופשי. נקרא מהעמודה המובילה של האינדקסים `IX_Requests_OrganizationName_CreatedAt` / `IX_Requests_AssignedTo_CreatedAt` (Index Scan, בלי Sort ובלי גישה לטבלה)
-- `GET /api/requests/{id}/history` — היסטוריית שינויי הסטטוס של בקשה, מהחדש לישן
-- `POST /api/requests/status/bulk` — עדכון סטטוס של עד 100 בקשות בקריאה אחת (פירוט בהמשך)
-
-נקודת הקצה של הרשימה תומכת ב:
+**פרמטרים של `GET /api/requests`** (ניתנים לשילוב):
 
 | פרמטר | התנהגות |
 |---|---|
-| `search` | חיפוש חלקי ב-`Title` או ב-`OrganizationName` (עד 200 תווים) |
-| `status`, `priority` | התאמה מדויקת לערך enum |
-| `organizationName`, `assignedTo` | התאמה מדויקת (לאחר Trim) — כדי לאפשר Index Seek |
-| `createdFrom`, `createdTo` | טווח חצי-פתוח: `createdFrom <= CreatedAt < createdTo`. כדי לכלול יום אחרון במלואו, שולחים את היום שאחריו |
-| `sortBy`, `sortDirection` | `createdAt` (ברירת מחדל) / `updatedAt` / `organizationName` / `priority` / `id`, `asc` / `desc` (ברירת מחדל). פירוט בסעיף "מיון" |
+| `search` | חיפוש חלקי ב-`Title` או ב-`OrganizationName` |
+| `status`, `priority`, `organizationName`, `assignedTo` | התאמה מדויקת |
+| `createdFrom`, `createdTo` | טווח חצי-פתוח: `createdFrom <= CreatedAt < createdTo` |
+| `sortBy` | `createdAt` (ברירת מחדל), `updatedAt`, `organizationName`, `priority`, `id` |
+| `sortDirection` | `asc` / `desc` (ברירת מחדל) |
 | `page`, `pageSize` | `pageSize` בין 1 ל-100 (ברירת מחדל 20) |
 
-כל הפרמטרים ניתנים לשילוב. קלט לא תקין (שדה מיון לא מורשה, `createdFrom >= createdTo`, מחרוזת ארוכה מדי, תאריך לא תקין) מחזיר `400` בפורמט ProblemDetails. דוגמאות מוכנות להרצה: [RequestsManagement.http](api/RequestsManagement/RequestsManagement.http).
+**סדר המיון:**
+- **כל מיון מסתיים ב-`Id`,** כך שהדפדוף יציב.
+- **ארגון ועדיפות** ממוינים בשני לפי תאריך יצירה, כדי שהסדר יתאים בדיוק לאינדקס.
+- **בכוונה אין מיון לפי:**
+  - סטטוס ומטפל: מעט ערכים, ויש להם סינון.
+  - כותרת: הסדר שלה חסר משמעות למשתמש.
 
-### עדכון סטטוס Bulk – חוזה
+**שגיאות:** כל שגיאה מוחזרת כ-ProblemDetails (`application/problem+json`), עם הודעה בעברית. הודעות ה-Model Binding של ASP.NET מתורגמות גם הן.
 
-```http
-POST /api/requests/status/bulk
-X-User-Name: <שם המשתמש, percent-encoded UTF-8>
-Content-Type: application/json
+| קוד | מתי |
+|---|---|
+| `400` | קלט לא תקין, סטטוס לא חוקי, מעבר סטטוס לא מותר, חסר שם משתמש |
+| `404` | פנייה לא קיימת |
+| `409` | התנגשות בעדכון (`rowVersion` מיושן) |
 
-{
-  "status": "Completed",
-  "items": [
-    { "id": 17, "rowVersion": "AAAAAAAAB9E=" },
-    { "id": 42, "rowVersion": "AAAAAAAAC1A=" }
-  ]
-}
-```
+**כללי מעבר סטטוס:**
+- `New` → `InProgress`.
+- `InProgress` → `Waiting` / `Completed`.
+- `Waiting` → `InProgress` / `Completed`.
+- `Completed` הוא סטטוס סופי.
 
-כל פריט נושא `rowVersion` משלו, כך שכל בקשה נבדקת ל-Concurrency בנפרד, בדיוק כמו בעדכון בודד.
-
-**הבחירה: Partial Success.** כל בקשה מעודכנת באופן עצמאי, והתשובה מפרטת מה קרה לכל אחת:
-
-```json
-{
-  "requested": 2,
-  "updated": 1,
-  "failed": 1,
-  "results": [
-    { "id": 17, "outcome": "Updated", "error": null, "request": { "id": 17, "status": "Completed", "rowVersion": "AAAAAAAAB+k=", "...": "..." } },
-    { "id": 42, "outcome": "Conflict", "error": "פנייה 42 עודכנה על ידי משתמש אחר מאז שנטענה. יש לרענן ולנסות שוב.", "request": null }
-  ]
-}
-```
-
-| `outcome` | מתי | מה הלקוח עושה |
-|---|---|---|
-| `Updated` | הבקשה עודכנה ונרשמה לה שורת היסטוריה | מחליף את השורה ב-`request` (שכולל את ה-`rowVersion` החדש) |
-| `NotFound` | אין בקשה עם המזהה הזה | מסיר אותה מהבחירה |
-| `Conflict` | ה-`rowVersion` שנשלח מיושן: משתמש אחר עדכן את הבקשה בינתיים | טוען מחדש ומחליט שוב |
-| `InvalidTransition` | המעבר אינו מותר לפי כללי המעברים, או שהבקשה כבר בסטטוס הזה | מוצגת ההודעה מ-`error` |
-
-**קודי HTTP:**
-- **`200`:** כל בקשה תקינה מבחינת מבנה, גם כשחלק מהפריטים, או כולם, נכשלו. `updated` / `failed` מסכמים, ו-`results` מופיעים בסדר הקלט.
-- **`400`:** קלט שגוי ברמת הבקשה כולה, שמעיד על באג בלקוח ולא על מצב של פנייה מסוימת. אף פריט לא מעודכן. המקרים:
-  - `status` חסר או לא חוקי.
-  - `items` ריק או מכיל יותר מ-100 פריטים.
-  - מזהה כפול.
-  - `id` שאינו חיובי.
-  - `rowVersion` חסר או לא בפורמט base64.
-  - כותרת `X-User-Name` חסרה.
-
-**למה Partial Success ולא All-or-Nothing:**
-- **כל פנייה עצמאית:** לכל פנייה `rowVersion` ומחזור חיים משלה, ובמערכת מרובת משתמשים צפוי שחלק מ-100 פניות שנבחרו עודכנו בינתיים על ידי אחרים.
-- **מה All-or-Nothing היה גורם:** קונפליקט אחד היה מכשיל 99 עדכונים תקינים, והמשתמש היה נאלץ לטעון מחדש ולנסות שוב, אולי שוב ושוב כשיש עומס.
-- **מה אובד:** אטומיות בין פניות שונות, שאין לה ערך עסקי כאן. כל פנייה בפני עצמה עדיין מעודכנת אטומית: הסטטוס ושורת ההיסטוריה שלה נשמרים באותה טרנזקציה.
-- **למה לא `207 Multi-Status`:** הוא בא מ-WebDAV, ורוב לקוחות ה-HTTP, כולל `HttpClient` של Angular, לא מטפלים בו באופן מיוחד. `200` עם `updated` / `failed` מפורשים ברור יותר.
-
-**מימוש** (`RequestService.BulkUpdateStatusAsync`):
-1. **ולידציה ברמת הבקשה כולה,** לפני שנוגעים בבסיס הנתונים: משתמש, סטטוס, כמות פריטים, מזהים כפולים ופורמט `rowVersion`.
-2. **שאילתה אחת טוענת את כל הפניות** (`WHERE Id IN (...)`), במקום שאילתה לכל פריט.
-3. **לכל פריט, לפי הסדר:**
-   - לא קיים → `NotFound`.
-   - `rowVersion` מיושן → `Conflict`.
-   - מעבר לא מותר → `InvalidTransition`.
-   - אחרת, `SaveChanges` נפרד לפריט: טרנזקציה משלו, עם הסטטוס ושורת ההיסטוריה יחד ו-`UPDATE ... WHERE RowVersion = @rv`.
-4. **אותה לוגיקה כמו בעדכון בודד:** בדיקת המעברים (`StatusTransitionPolicy`), בדיקת ה-`rowVersion` וכתיבת ההיסטוריה משותפות לשני המסלולים.
-5. **קונפליקט שמתגלה רק ב-`SaveChanges`** (כותב מתחרה בין הטעינה לשמירה) מדווח כ-`Conflict`. הישויות של אותו פריט מנותקות מה-`DbContext`, כדי שה-`SaveChanges` של הפריט הבא לא ינסה לשמור אותן שוב.
-
-המחיר הוא עד 100 פניות לבסיס הנתונים בקריאה אחת. זה סביר לפעולה שמוגבלת ל-100 פריטים, וזה מה שמאפשר הצלחה חלקית. `SaveChanges` אחד לכל הפריטים היה מבטל את כולם בקונפליקט אחד.
-
-**מגבלה:** אם השרת נכשל באמצע הריצה, למשל כשבסיס הנתונים נופל או כשהלקוח מבטל, פריטים שכבר נשמרו נשארים שמורים, והלקוח לא מקבל את התשובה המפורטת. כל פריט שנשמר עדיין עקבי, כולל שורת ההיסטוריה שלו. במקרה כזה הלקוח צריך לטעון מחדש. אפשר לשפר זאת עם Idempotency Key, כך שאותה פעולה תוכל להישלח שוב בבטחה.
+כל פנייה ברשימה כוללת `allowedNextStatuses`, כך שהממשק לא משכפל את הכללים.
 
 ## Concurrency ומניעת Lost Update
 
-**המנגנון:** לכל פנייה יש `RowVersion` (`rowversion` של SQL Server), ש-SQL Server מעלה אוטומטית בכל עדכון של השורה. הלקוח מקבל אותו בכל שליפה ושולח אותו בחזרה בעדכון. האכיפה בצד השרת נעשית בשתי שכבות:
+**המנגנון:** לכל פנייה יש `RowVersion` ש-SQL Server מעלה בכל עדכון. הלקוח מחזיר את הגרסה שקרא, והשרת בודק אותה בשתי שכבות:
+1. **בדיקה מוקדמת:** גרסה מיושנת מקבלת `409`, עוד לפני בדיקת המעבר. לקוח שהנתון אצלו מיושן צריך "רענן", ולא `400`.
+2. **בבסיס הנתונים:** `UPDATE ... WHERE Id = @id AND RowVersion = @rv`. מבין שני עדכונים מקבילים, רק אחד מתאים לשורה. השני מקבל `409`.
 
-1. **בדיקה מוקדמת:**
-   - אם ה-`rowVersion` של הלקוח כבר לא תואם, מוחזר `409` עוד לפני בדיקת חוקיות המעבר.
-   - הסיבה: לקוח שהנתון אצלו מיושן צריך לקבל "רענן", ולא `400` על מעבר מסטטוס שהוא בכלל לא ראה.
-2. **בדיקה בבסיס הנתונים:**
-   - ה-`UPDATE` נשלח עם `WHERE Id = @id AND RowVersion = @rv`.
-   - בין שני עדכונים שמגיעים יחד, רק אחד יתאים לשורה. השני יקבל `DbUpdateConcurrencyException`, שמתורגם ל-`409`.
-   - שורת ההיסטוריה שנשמרה באותה טרנזקציה מתבטלת יחד עם העדכון.
+**עקביות:**
+- **אטומיות:** שורת ה-Audit נשמרת באותה טרנזקציה, ומתבטלת יחד עם עדכון שנכשל.
+- **חותם זמן אחד:** `UpdatedAt` ו-`ChangedAt` מקבלים את אותו ערך.
+- **גרסה חדשה:** ה-`RowVersion` החדש חוזר בתשובה.
 
-**עקביות:** `UpdatedAt` של הפנייה ו-`ChangedAt` של שורת ההיסטוריה מקבלים את אותו חותם זמן. ה-`RowVersion` החדש חוזר בתשובה ומשמש לעדכון הבא.
+**בדיקה מול SQL Server:** 8 עדכונים מקבילים עם אותו `rowVersion` → בדיוק `200` אחד, ושבעה `409`. נרשמת שורת היסטוריה אחת.
 
-**מה זה מבטיח:** אין Lost Update. עדכון עם גרסה ישנה לעולם לא דורס שינוי של משתמש אחר.
+**ההיסטוריה:** כל שינוי נשמר כשורת Audit עם `RequestId`, `PreviousStatus`, `NewStatus`, `ChangedAt`, `ChangedBy`.
 
-**איך זה נבדק מול SQL Server אמיתי:**
-- **מירוץ אמיתי:** 8 עדכונים מקבילים עם אותו `rowVersion`. בדיוק אחד מקבל `200`, השאר `409`, ונרשמת שורת היסטוריה אחת.
-- **Lost Update:** עדכון שני עם גרסה ישנה מקבל `409`.
-- **Mutation:** הסרת ההגנה מכשילה את הבדיקה.
+## עדכון Bulk
 
-**ב-UI:** ב-`409` מוצגת הודעה ("הבקשה עודכנה על ידי משתמש אחר...") והעמוד נטען מחדש עם הגרסאות העדכניות. בחירת הסטטוס תמיד מציגה את הסטטוס השמור, ולא את מה שנבחר ונדחה.
+```json
+POST /api/requests/status/bulk        (כותרת X-User-Name)
+{ "status": "Completed", "items": [ { "id": 17, "rowVersion": "AAAAAAAAB9E=" }, { "id": 42, "rowVersion": "AAAAAAAAC1A=" } ] }
 
-## החלטות טכנולוגיות וחלופות
-
-### 1. Optimistic Concurrency, ולא Pessimistic Locking או Last-Write-Wins
-
-- **Last-Write-Wins:** היה מאפשר לשינוי של משתמש אחד לדרוס בשקט שינוי של משתמש אחר, בלי התראה לאף אחד מהם. זה בדיוק ה-Lost Update שהאפיון אוסר.
-- **Pessimistic Locking:**
-  - לא מתאים ל-REST API חסר מצב: לעדכון סטטוס קצר אין נקודה טבעית לנעילה ולשחרור, ונעילה שלא שוחררה חוסמת משתמשים אחרים.
-  - נעילות ארוכות פוגעות במקביליות. המערכת מיועדת למשתמשים רבים במקביל.
-- **Optimistic:**
-  - אין מצב לנהל בשרת. הבדיקה היא השוואת גרסה אחת בתוך ה-`UPDATE` עצמו.
-  - התנגשויות נדירות, ולכן כישלון מהיר עם `409` ברור הוא הפשרה הנכונה.
-
-### 2. Bulk עם Partial Success, ולא All-or-Nothing
-
-- **All-or-Nothing:** קונפליקט אחד בפנייה אחת היה מכשיל עד 99 עדכונים תקינים. במערכת מרובת משתמשים, פניות שעודכנו בינתיים על ידי אחרים הן מצב צפוי, ולא חריג.
-- **Partial Success:**
-  - כל פנייה נשמרת בטרנזקציה משלה, עם הסטטוס ושורת ההיסטוריה שלה יחד.
-  - התשובה מפרטת לכל פנייה: `Updated` / `NotFound` / `Conflict` / `InvalidTransition`.
-  - שגיאה ברמת הבקשה כולה (למשל יותר מ-100 פריטים או מזהה כפול) עדיין מחזירה `400` בלי לעדכן דבר.
-  - **מה ויתרנו עליו:** אטומיות בין פניות שונות, שאין לה ערך עסקי כאן.
-- **`207 Multi-Status` נשקל ונדחה:** הוא בא מ-WebDAV, ולקוחות HTTP, כולל `HttpClient` של Angular, לא מטפלים בו. `200` עם `updated` / `failed` מפורשים ברור יותר.
-
-פירוט החוזה: סעיף "עדכון סטטוס Bulk – חוזה". החלטות נוספות שנשקלו בהן חלופות מתועדות בסעיפים הרלוונטיים:
-- **Cache:** מפתח עם גרסה, לעומת מפתח קבוע, ולעומת Pub/Sub.
-- **ביצועים:** Deferred Join לעומת Keyset Pagination.
-- **מיון:** אילו שדות, ולמה.
-
-## Angular: ארכיטקטורה ועבודה מול ה-API
-
-- **הפרדת אחריות:**
-  - `RequestsService` הוא היחיד שפונה ל-API.
-  - `RequestsPageComponent` מחזיק את המצב (Signals) ומתזמר.
-  - הקומפוננטות (`request-filters`, `requests-table`, `request-status-action`, `bulk-action-bar`, `bulk-result-panel`, `request-history-dialog`, `request-summary`) מציגות בלבד, דרך inputs ו-outputs.
-- **כל הפעולות בצד השרת:** חיפוש, סינון, מיון ודפדוף נשלחים כפרמטרים. אין סינון או מיון של נתונים בדפדפן.
-- **Debounce:** 300 ms לחיפוש החופשי. בחירות בסינונים נשלחות מיד.
-- **ביטול בקשות קודמות:** `switchMap` מבטל בקשה שעדיין בדרך כשהשאילתה משתנה, כך שתשובה ישנה לעולם לא דורסת חדשה. אומת גם בדפדפן אמיתי (`net::ERR_ABORTED`).
-- **מצבי UI:**
-  - Loading: Spinner בטעינה ראשונה, ו-Progress bar ברענון, בלי להעלים את השורות הקיימות.
-  - Empty: עם כפתור "איפוס מסננים".
-  - Error: עם כפתור "נסה שוב". גם ב-Summary ובדיאלוג ההיסטוריה.
-- **שגיאות:**
-  - `httpErrorInterceptor` ממפה כל שגיאה לסוג (409 / 404 / 400 / רשת / שרת) ושולף את ההסבר מה-ProblemDetails.
-  - ב-`409` העמוד נטען מחדש.
-  - בבחירת הסטטוס מוצעים רק המעברים שהשרת מתיר (`allowedNextStatuses`), כך שאין כפילות של כללי המעברים בצד הלקוח.
-
-## טיפול בשגיאות ו-Logging
-
-- **Global Error Handling:**
-  - `ExceptionHandlingMiddleware` מתרגם חריגות של האפליקציה ל-ProblemDetails (`application/problem+json`): `400`, `404` ו-`409`.
-  - שגיאה לא צפויה מחזירה `500` עם הודעה כללית, בלי Stack Trace ובלי פרטי DB.
-- **כל הודעות השגיאה בעברית:**
-  - הודעות האפליקציה.
-  - מגבלות ה-DTOs.
-  - הודעות ה-Model Binding של ASP.NET.
-  - JSON לא תקין: ההודעה הפנימית של System.Text.Json לא נחשפת.
-  - בדיקת אינטגרציה עוברת על 13 סוגי שגיאה ומוודאת שכולם בעברית.
-- **Logging בנקודות משמעותיות:**
-  - שינוי סטטוס: Information.
-  - קונפליקט: Warning, עם הבחנה בין בדיקה מוקדמת למרוץ שזוהה ב-DB.
-  - סיכום Bulk, Seeding ו-Reseed.
-  - שגיאות לקוח: Information.
-  - `500`: Error.
-- **בלי מידע רגיש:**
-  - שם המשתמש לא נרשם בלוג, הוא נמצא רק בטבלת ההיסטוריה.
-  - ערכי Header לא נרשמים.
-  - תווי בקרה בהודעות מוחלפים, כדי למנוע זיוף שורות לוג.
-- **ביטול על ידי הלקוח:** בקשה שהלקוח ביטל (למשל בחיפוש מהיר) נרשמת כ-Information עם `499`, ולא כשגיאת שרת.
-
-## שליפת נתונים: מניעת טעינה לזיכרון ואינדקסים
-
-### איך נמנעת טעינת כלל הנתונים לזיכרון
-
-`RequestService.GetRequestsAsync` בונה `IQueryable` ומבצע את כל העבודה בבסיס הנתונים. לזיכרון מגיעות רק השורות של העמוד המבוקש:
-
-1. **`db.Requests.AsNoTracking()`** — שום דבר עוד לא נשלף. בנוסף, אין מעקב שינויים, כי זו שליפה לקריאה בלבד.
-2. **כל פילטר מוסיף `Where`** לאותו `IQueryable`, ו-EF מתרגם אותו ל-`WHERE` עם פרמטרים. הפרמטרים מאפשרים שימוש חוזר ב-Execution Plan ומונעים SQL Injection.
-3. **ספירה:**
-   - **עם פילטרים:** `CountAsync`, כלומר `SELECT COUNT(*)` עם אותו `WHERE`. חוזר מספר אחד בלבד.
-   - **בלי פילטרים:** הסה"כ נלקח מה-Summary שב-Cache, ושאילתת ספירה לא נשלחת בכלל.
-4. **עמוד מעבר לסוף התוצאות** — אם ה-offset גדול או שווה לסך התוצאות, שאילתת העמוד לא נשלחת בכלל.
-5. **`ApplySort` + `Skip/Take` כ-Deferred Join:**
-   - קודם תת-שאילתה בוחרת את מזהי העמוד, עם `ORDER BY ... , Id` ו-`OFFSET/FETCH`, מתוך האינדקס בלבד.
-   - רק עבור המזהים האלה נשלפות השורות המלאות.
-   - כך עמוד עמוק לא משלם Key Lookup על כל שורה שמדלגים עליה: עמוד 2,501 ירד מ-153,454 קריאות ל-319 (ראו [docs/PERFORMANCE.md](docs/PERFORMANCE.md)).
-6. **`Select(RequestMappings.ToDtoProjection)`** — נשלפות רק העמודות של ה-DTO, ולא ישויות מלאות.
-7. **`ToListAsync`** — זו נקודת ה-materialization היחידה, ומגיעות בה לכל היותר `pageSize` שורות (100 לכל היותר).
-
-ה-SQL ש-EF מייצר בפועל (סינון לפי ארגון, מיון ברירת המחדל):
-
-```sql
-SELECT [r].[Id], [r].[Title], [r].[OrganizationName], [r].[AssignedTo], [r].[Status],
-       [r].[Priority], [r].[CreatedAt], [r].[UpdatedAt], [r].[RowVersion]
-FROM [Requests] AS [r]
-WHERE [r].[Id] IN (
-    SELECT [r0].[Id] FROM [Requests] AS [r0]
-    WHERE [r0].[OrganizationName] = @__organizationName_0
-    ORDER BY [r0].[CreatedAt] DESC, [r0].[Id] DESC
-    OFFSET @__p_1 ROWS FETCH NEXT @__p_2 ROWS ONLY)
-ORDER BY [r].[CreatedAt] DESC, [r].[Id] DESC
+200 OK
+{ "requested": 2, "updated": 1, "failed": 1,
+  "results": [ { "id": 17, "outcome": "Updated", "request": { "...": "כולל rowVersion חדש" } },
+               { "id": 42, "outcome": "Conflict", "error": "פנייה 42 עודכנה על ידי משתמש אחר מאז שנטענה. יש לרענן ולנסות שוב." } ] }
 ```
 
-`allowedNextStatuses` שב-DTO מחושב בזיכרון מתוך `Status`, כך שאינו מוסיף עמודות ל-SQL.
+**ההתנהגות: Partial Success.**
+- **כל פנייה נשמרת בטרנזקציה משלה,** עם ה-`rowVersion` שלה ושורת ה-Audit שלה.
+- **לכל פנייה מוחזרת תוצאה, בסדר הקלט:**
+  - `Updated`: הפנייה עודכנה.
+  - `NotFound`: אין פנייה עם המזהה הזה.
+  - `Conflict`: משתמש אחר עדכן אותה בינתיים.
+  - `InvalidTransition`: המעבר לא מותר.
+- **הספירות:** `updated` ו-`failed` מסכמים כמה הצליחו וכמה נכשלו.
+- **`400` בלי לעדכן דבר:** שגיאה ברמת הבקשה כולה, כמו 0 או יותר מ-100 פריטים, מזהה כפול או סטטוס חסר.
 
-גם ה-Summary מחושב ב-`GROUP BY` בבסיס הנתונים, כך שחוזרות 4 שורות לסטטוס ו-3 לעדיפות, ולא 100,000 רשומות.
-
-**הגנות נוספות:**
-- **`pageSize` מוגבל ל-100.**
-- **רשימה מורשית של שדות מיון:** אין אפשרות למיין לפי עמודה שאין לה אינדקס תומך.
-- **`Id` כ-tiebreaker בכל מיון:** בלעדיו, שורות עם ערך מיון זהה, למשל כ-500 פניות לכל ארגון, יכולות להופיע פעמיים או להיעלם בין עמודים. ה-`Id` כבר חלק מהמפתח של כל אינדקס non-clustered, ולכן ה-tiebreaker לא מוסיף Sort.
-
-### מיון
-
-| `sortBy` | שימוש | הסדר המלא | אינדקס תומך |
-|---|---|---|---|
-| `createdAt` (ברירת מחדל) | הבקשות החדשות או הוותיקות ביותר | `CreatedAt, Id` | `IX_Requests_CreatedAt` |
-| `updatedAt` | בקשות שלא טופלו לאחרונה, או שהשתנו עכשיו | `UpdatedAt, Id` | `IX_Requests_UpdatedAt` |
-| `organizationName` | סידור ואיתור לפי ארגון (כ-200 ארגונים) | `OrganizationName, CreatedAt, Id` | `IX_Requests_OrganizationName_CreatedAt` |
-| `priority` | הדחופות קודם (`desc`), ובתוך כל עדיפות החדשות קודם | `Priority, CreatedAt, Id` | `IX_Requests_Priority_CreatedAt` (קיים, בלי Migration) |
-| `id` | סדר יציב וברור | `Id` | המפתח הראשי (Clustered) |
-
-כל השדות בסדר המלא הולכים באותו כיוון (`asc` או `desc`).
-
-**מיון לפי עדיפות:**
-- **הסדר הוא לפי דחיפות, לא לפי האלף-בית:** `Priority` נשמר כערך ה-enum (`Low=0`, `Medium=1`, `High=2`), ולכן `desc` מחזיר High ← Medium ← Low. מיון לפי השם היה מחזיר High, Low, Medium.
-- **אותו עיקרון כמו בארגון:** הסדר המלא זהה למפתח `(Priority, CreatedAt)` + `Id`. נבדק מול SQL Server (עמוד ראשון של 20, על 12,000 רשומות): `Top` מעל Index Scan בסדר הפוך (`ORDERED BACKWARD`), בלי Sort, 50 עמודים שנקראו. בלי האינדקס: Sort על Clustered Index Scan של כל הטבלה, 467 עמודים.
-- **ב-Angular:** לחיצה ראשונה על כותרת העמודה ממיינת מהדחופה ביותר (`start="desc"`), כי לשם כך ממיינים לפי עדיפות.
-
-**למה במיון לפי ארגון המיון המשני הוא תאריך היצירה ולא `Id`:**
-- **כך הסדר זהה בדיוק למפתח האינדקס:** האינדקס הוא `(OrganizationName, CreatedAt)`, ומפתח non-clustered מסתיים תמיד ב-`Id`. SQL Server קורא את האינדקס לפי הסדר ונעצר אחרי עמוד אחד.
-- **בדקתי מול SQL Server, עמוד שלישי של 20, על 12,000 רשומות:**
-
-  | סדר | Plan | עמודים שנקראו |
-  |---|---|---|
-  | `OrganizationName, CreatedAt, Id` | `Top` מעל Index Scan מסודר, בלי Sort | 135 |
-  | `OrganizationName, Id` (נאיבי) | `Top` מעל **Sort** על Clustered Index Scan של כל הטבלה | 467, וגדל עם הטבלה |
-
-- **גם הגיוני למשתמש:** בתוך הבקשות של ארגון, הן מסודרות לפי תאריך.
-
-**אין מיון לפי סטטוס, מטפל או כותרת, בכוונה:**
-- **סטטוס ומטפל:** מעט ערכים אפשריים (4 ו-15), ולכל אחד מהם יש סינון. הצורך האמיתי הוא "להציג רק את אלה", לא לסדר לפיהם. לסטטוסים גם אין סדר טבעי אחד (Waiting אינו "יותר" או "פחות" מ-InProgress).
-- **עדיפות שונה:** יש לה סדר טבעי (דחיפות), ולכן "הדחופות קודם" על פני כל הרשימה הוא צורך אמיתי, בנוסף לסינון.
-- **ארגון שונה:** כ-200 ערכים, ולכן גם לסידור הרשימה לפיו יש ערך, בנוסף לסינון.
-- **כותרת:** טקסט חופשי שהסדר שלו כמעט חסר משמעות למשתמש, והיה דורש אינדקס נוסף.
-
-ה-API מחזיר `400` לכל שדה שאינו ברשימה, וב-Angular יש `mat-sort-header` רק לחמש העמודות האלה.
-
-### האינדקסים ותרחישי החיפוש והסינון
-
-| אינדקס | תרחיש | למה בסדר הזה |
-|---|---|---|
-| `IX_Requests_Status_CreatedAt` | סינון לפי סטטוס, החדשים קודם | Seek על `Status`, ואז `CreatedAt` כבר ממוין. משרת גם את `GROUP BY Status` |
-| `IX_Requests_Priority_CreatedAt` | סינון לפי עדיפות, החדשים קודם; מיון לפי עדיפות | אותו עיקרון. משרת גם את `GROUP BY Priority` |
-| `IX_Requests_AssignedTo_CreatedAt` | "התור של מטפל", מטפל + טווח תאריכים | Seek בשוויון על `AssignedTo`, ו-`CreatedAt` משמש גם כטווח וגם כמיון. משרת גם את רשימת המטפלים ב-`filter-options` |
-| `IX_Requests_OrganizationName_CreatedAt` | סינון לפי ארגון מדויק, מיון לפי ארגון | אותו עיקרון |
-| `IX_Requests_CreatedAt` | רשימה ללא סינון (ברירת המחדל), טווח תאריכים בלבד | Seek על טווח, ובסדר המיון |
-| `IX_Requests_UpdatedAt` | מיון לפי "עודכן לאחרונה" | מונע Sort על כל הטבלה |
-| `IX_RequestStatusHistory_RequestId_ChangedAt` | היסטוריית שינויים של פנייה | Seek לפי פנייה, כבר ממוין לפי זמן השינוי |
-
-**מדידה על 100,000 רשומות** (`SET STATISTICS IO`, logical reads, שאילתות עם פרמטרים כפי ש-EF שולח):
-
-| שאילתה | לפני האינדקסים החדשים (COUNT) | אחרי (COUNT / עמוד של 20) | Plan אחרי |
-|---|---|---|---|
-| לפי מטפל | 2,539 (Clustered Index Scan) | 34 / 196 | Index Seek |
-| לפי ארגון | 2,539 (Clustered Index Scan) | 8 / 157 | Index Seek |
-| טווח תאריכים | 40 | 40 / 154 | Index Seek (אינדקס קיים) |
-| סטטוס + מטפל + טווח | 2,539 (Clustered Index Scan) | 15 / 685 | Seek על שני אינדקסים |
-
-בכל שאילתות העמוד ה-Plan הוא `Top` מעל Index Seek שנקרא בסדר הפוך (`ORDERED BACKWARD`), כלומר בסדר המיון המבוקש. אין בו אופרטור Sort, והקריאה נעצרת אחרי 20 שורות.
-
-מדידה מלאה של פעולות הרשימה וה-Summary על 100,000 רשומות, לפני ואחרי אינדקסים, עם ה-Bottlenecks שנמצאו והשיפורים המוצעים (כולל מדידה שלהם): [docs/PERFORMANCE.md](docs/PERFORMANCE.md).
-
-**מגבלות ידועות:**
-- **`search` לא יכול להשתמש באינדקס:** חיפוש חלקי מתורגם ל-`LIKE '%term%'`, שאינו sargable, ולכן נסרקים כל ה-`Title` וה-`OrganizationName`. ב-100,000 רשומות זה סביר. בהיקף גדול יותר החלופה היא Full-Text Search.
-- **שילוב סטטוס + מטפל:** `Status` אינו חלק מ-`IX_Requests_AssignedTo_CreatedAt`, ולכן הוא נבדק רק אחרי Key Lookup לכל שורה (685 קריאות בטבלה למעלה). אפשר להוסיף `INCLUDE (Status)`, במחיר עדכון אינדקס נוסף בכל שינוי סטטוס.
+**הנימוק:**
+- **למה לא All-or-Nothing:** במערכת מרובת משתמשים צפוי שחלק מהפניות עודכנו בינתיים, ו-All-or-Nothing היה מכשיל עד 99 עדכונים תקינים בגלל קונפליקט אחד.
+- **על מה ויתרנו:** אטומיות בין פניות שונות, שאין לה ערך עסקי כאן.
+- **למה לא `207 Multi-Status`:** הוא בא מ-WebDAV, ולקוחות HTTP לא מטפלים בו. `200` עם ספירות מפורשות ברור יותר.
 
 ## Cache
 
-### מה נשמר ולמה
+**מה נשמר:** ה-Summary (סה"כ, לפי סטטוס ולפי עדיפות).
+- **השאילתה היקרה ביותר:** `COUNT` ושני `GROUP BY` על כל הטבלה, כ-230 ms, בכל טעינת מסך.
+- **התוצאה זהה לכל המשתמשים.**
+- **רשימות מסוננות לא נשמרות:** מרחב המפתחות גדול מדי, וה-Invalidation שלהן מורכב.
 
-נשמרת **תוצאת ה-Summary** (`GET /api/requests/summary`): סה"כ, וספירות לפי סטטוס ולפי עדיפות.
+**Expiration:** `AbsoluteExpiration` של 60 שניות. זו רשת ביטחון לשינויים שלא עוברים דרך הקוד.
 
-- **זו השאילתה היקרה ביותר ביחס לתועלת:** `COUNT` ושני `GROUP BY` על כל הטבלה, בכל טעינת מסך.
-- **התוצאה זהה לכל המשתמשים,** ולכן מפתח אחד מספיק.
-- **היא זעירה:** 7 מספרים.
-- **התועלת נמדדה:** 1,206 ms בקריאה הראשונה (כולל חימום האפליקציה), ו-19–26 ms מה-Cache.
+**Invalidation:**
+- **מתי:** אחרי כל שינוי סטטוס שהצליח, בודד או פריט ב-Bulk, ואחרי Seeding.
+- **אחרי ה-commit, לא לפניו:** אחרת קורא מקביל היה מחשב מחדש מהנתונים הישנים.
+- **עדכון שנכשל לא מבטל:** שום נתון לא השתנה.
+- **המפתח כולל מספר גרסה:** קורא שחישב לפני ה-commit לא יכול לשמור תוצאה ישנה אחרי ה-Invalidation.
 
-**מה לא נשמר:**
-- **רשימות מסוננות:** מרחב המפתחות כמעט אינסופי, כל שילוב של פילטרים × מיון × עמוד. כל שינוי סטטוס היה מחייב לבטל חלק לא צפוי מהן. הן כבר נתמכות באינדקסים, כך שהרווח קטן והסיכון לנתון מיושן גדול.
-- **היסטוריה:** נשלפת ב-Index Seek של שורות בודדות, ונפתחת רק לפי דרישה.
-
-### Expiration
-
-`AbsoluteExpiration` של **60 שניות** (`MemoryRequestSummaryCache.Expiration`). זו רשת ביטחון, ולא המנגנון העיקרי לנכונות. היא חוסמת את חלון הנתון המיושן במקרה של שינוי שלא עבר דרך הקוד, למשל עדכון ידני ב-SQL, או במקרה של שרת אחר (ראו Scale-out).
-
-### Invalidation
-
-| אירוע | Invalidation? | איפה |
-|---|---|---|
-| עדכון סטטוס בודד שהצליח | כן | `RequestService.TrySaveStatusChangeAsync`, **אחרי** ה-commit |
-| כל פריט שהצליח ב-Bulk | כן, לכל פריט | אותו מקום. גם אם קריאת Bulk נכשלת באמצע, הפריטים שכבר נשמרו כבר ביטלו את ה-Cache |
-| עדכון שנכשל (400 / 404 / 409) | לא | שום נתון לא השתנה |
-| Seeding / `--reseed` | כן | `Program.cs` |
-
-**למה אחרי ה-commit ולא לפניו:** Invalidation לפני ה-commit היה מאפשר לקורא מקביל לחשב מחדש מהנתונים הישנים ולשמור אותם שוב.
-
-**מרוץ בין קורא לכותב, וגרסה במפתח:**
-- **התרחיש:** קורא מתחיל לחשב את ה-Summary מנתונים לפני השינוי. בזמן החישוב כותב עושה commit ומבטל את ה-Cache. בסוף הקורא שומר את התוצאה הישנה, ו-Cache עם מפתח קבוע היה מגיש נתון מיושן עד 60 שניות.
-- **הפתרון:** המפתח כולל מספר גרסה (`requests:summary:{generation}`).
-  - `Invalidate()` מעלה את הגרסה ב-`Interlocked.Increment` ומוחק את המפתח הקודם.
-  - קורא שומר את התוצאה תחת הגרסה שראה **לפני** החישוב, כך שתוצאה ישנה נשמרת תחת מפתח שאף אחד כבר לא קורא.
-  - בלי נעילות.
-- **בדיקות:** מכוסה ב-`SummaryCacheTests`. בדיקה שמסירה את הגרסה מהמפתח נכשלת.
-
-### Scale-out: כמה מופעי שרת
-
-**הבעיה:** `IMemoryCache` שייך לתהליך אחד. מאחורי Load Balancer, עדכון שעובר בשרת A מבטל רק את ה-Cache של A. שרת B ממשיך להגיש את המספרים הישנים עד שה-Expiration שלו פג, כלומר עד 60 שניות.
-
-**ההתאמה הנדרשת:** החלפת המימוש של `IRequestSummaryCache`, שהוא נקודת ההחלפה היחידה, במימוש מבוזר מעל Redis (`IDistributedCache`). `RequestService` וה-Controller לא משתנים.
-- **הגרסה עוברת ל-Redis:** `INCR requests:summary:generation` ב-`Invalidate()`, כך שכל השרתים רואים את אותה גרסה.
-- **הערך נשמר תחת `requests:summary:{generation}`** עם אותו TTL. אותו פתרון למרוץ, בלי שינוי לוגי.
-- **המחיר:** קריאת רשת ל-Redis בכל בקשת Summary, בערך milliseconds בודדים, במקום גישה לזיכרון. זה עדיין זול בהרבה מ-`GROUP BY` על כל הטבלה.
-
-**חלופה שנשקלה – Cache מקומי + Pub/Sub לביטול:** כל שרת שומר עותק בזיכרון ומפרסם הודעת ביטול לשאר השרתים. Latency נמוך יותר, אבל יותר חלקים נעים: הודעה שאבדה משאירה שרת עם נתון ישן עד ה-TTL. לנתון קטן שנקרא פעם בטעינת מסך, Redis כ-Cache משותף פשוט ונכון יותר.
-
-**מגבלה ידועה (גם במופע יחיד):** אין הגנה מ-Cache Stampede. כשהערך לא ב-Cache, כמה בקשות מקבילות יחשבו אותו במקביל. בעומס הנוכחי מדובר בכמה שאילתות `GROUP BY` כפולות, וזה זניח. בעומס גבוה אפשר להוסיף נעילה סביב החישוב, `SemaphoreSlim` מקומי או Redis Lock במימוש המבוזר.
+**כמה מופעי שרת:**
+- **הבעיה:** `IMemoryCache` שייך לתהליך אחד. מאחורי Load Balancer, שרת אחר היה מגיש נתון ישן עד 60 שניות.
+- **ההתאמה:** החלפת המימוש של `IRequestSummaryCache` במימוש מעל Redis (`IDistributedCache`), כשמספר הגרסה מנוהל ב-Redis (`INCR`). שאר הקוד לא משתנה.
 
 ## בדיקות
 
-| פרויקט | סוג | מול | מה מכוסה |
-|---|---|---|---|
-| `api/RequestsManagement.Tests` | Unit (xUnit) | EF InMemory | לוגיקה של `RequestService`: סינון, מיון, דפדוף, מעברי סטטוס (כל 16 הצירופים), Audit, Bulk, Cache ו-Invalidation, זיהוי המשתמש, Logging |
-| `api/RequestsManagement.IntegrationTests` | Integration (xUnit + `WebApplicationFactory`) | **SQL Server אמיתי** | ה-API מקצה לקצה דרך HTTP: SQL שנוצר בפועל, `rowversion`, טרנזקציות, ProblemDetails |
-| `ui` | Unit/Component (Vitest) | `HttpTestingController` | Debounce, ביטול בקשות קודמות, מצבי Loading/Empty/Error, 409/400, Bulk, היסטוריה, Aggregations |
+| פרויקט | סוג | מה מכוסה |
+|---|---|---|
+| `RequestsManagement.Tests` | Unit, מול EF InMemory | שליפה, סינון ומיון, כל 16 צירופי המעברים, Audit, Bulk, Cache ו-Invalidation, ולידציה |
+| `RequestsManagement.IntegrationTests` | Integration: API מלא (`WebApplicationFactory`) מול **SQL Server אמיתי** | Concurrency אמיתי, ביטול ה-Audit בקונפליקט, ולידציה דרך ה-pipeline (כולל עברית), Bulk, היסטוריה, Cache |
+| `ui` | Vitest | Debounce, ביטול בקשות, מצבי UI, 409/400, Bulk, היסטוריה, Aggregations |
 
-**בדיקות האינטגרציה מכסות מה ש-InMemory לא יכול:**
-- **Concurrency אמיתי:** 8 עדכונים מקבילים עם אותו `rowVersion`. בדיוק אחד מקבל `200`, השאר `409`, ונרשמת שורת היסטוריה אחת בלבד, של המנצח.
-- **Lost Update:** עדכון שני עם `rowVersion` ישן מקבל `409`, ולא דורס את הראשון.
-- **קונפליקט שמתגלה רק ב-`SaveChanges`:** משתמש אחר עושה commit בין הטעינה לשמירה. שורת ה-Audit מתבטלת יחד עם ה-`UPDATE`, באותה טרנזקציה.
-- **Validation דרך ה-pipeline האמיתי:** `400` / `404` כ-`application/problem+json`, בלי שינוי בנתונים.
-- **Bulk עם הצלחה חלקית:** כל פריט מקבל את התוצאה הנכונה, וכך גם בסיס הנתונים וההיסטוריה.
-- **ה-Summary מתעדכן מיד** אחרי עדכון בודד ואחרי Bulk.
-
-**הרצה:**
-
-```bash
-cd api
-dotnet test                                    # Unit + Integration
-dotnet test RequestsManagement.IntegrationTests   # רק Integration
-cd ../ui && npx ng test --watch=false          # Frontend
-```
-
-**בדיקות האינטגרציה צריכות SQL Server:**
-- **ברירת המחדל היא LocalDB** (`(localdb)\MSSQLLocalDB`).
-- **שרת אחר:** מגדירים את משתנה הסביבה `REQUESTS_IT_SQLSERVER` ל-connection string בלי שם מסד, למשל בהרצה ב-CI.
-- **מסד ייחודי לכל הרצה:** נוצר על ידי ה-migrations של האפליקציה, ונמחק בסוף. כל בדיקה מתחילה מטבלאות ריקות.
+**תשתית האינטגרציה:**
+- **מסד ייחודי לכל הרצה:** נוצר מה-migrations ונמחק בסוף.
 - **בלי Seeding:** האפליקציה עולה עם `Seeding:Enabled=false`, וכל בדיקה יוצרת רק את השורות שהיא צריכה.
+
+## החלטות טכנולוגיות וחלופות
+
+**1. Optimistic Concurrency, ולא Pessimistic Locking או Last-Write-Wins.**
+- **Last-Write-Wins:** דורס בשקט שינוי של משתמש אחר. זה בדיוק ה-Lost Update שהאפיון אוסר.
+- **Pessimistic Locking:** לא מתאים ל-REST API חסר מצב. לעדכון קצר אין נקודת נעילה ושחרור טבעית, ונעילה שלא שוחררה חוסמת משתמשים אחרים.
+- **Optimistic:** בלי מצב בשרת, בדיקה אחת בתוך ה-`UPDATE`. התנגשויות נדירות, ולכן `409` ברור הוא הפשרה הנכונה.
+
+**2. Bulk עם Partial Success, ולא All-or-Nothing:** ראו הנימוק בסעיף "עדכון Bulk".
 
 ## מגבלות ידועות
 
-- **זהות המשתמש מבוססת Header, בלי Authentication:**
-  - `X-User-Name` נלקח כפי שהוא, ולא מאומת. כל לקוח יכול לשלוח כל שם.
-  - נקודת ההחלפה היא אחת (`ICurrentUser`), כך שמעבר ל-JWT ישנה מחלקה אחת בלבד.
-- **Bulk שנקטע באמצע,** למשל כשבסיס הנתונים נופל: פריטים שכבר נשמרו נשארים שמורים, והלקוח לא מקבל את התשובה המפורטת. כל פריט עדיין עקבי, והלקוח צריך לטעון מחדש.
-- **חיפוש חופשי (`LIKE '%x%'`) לא משתמש באינדקס:** ה-`COUNT` שלו סורק את כל הטבלה, כ-0.5–1 שנייה ב-100,000 רשומות. ראו [docs/PERFORMANCE.md](docs/PERFORMANCE.md), Bottleneck 1.
-- **בחירה ל-Bulk מוגבלת לעמוד הנוכחי:** עד 100 שורות, כגבול השרת.
+- **זהות המשתמש מבוססת Header, בלי Authentication:** `X-User-Name` לא מאומת. ההחלפה ל-JWT היא במקום אחד (`ICurrentUser`).
+- **חיפוש חופשי:** `LIKE '%x%'` לא משתמש באינדקס, וה-`COUNT` שלו סורק את כל הטבלה, כ-0.5–1 שנייה ב-100,000 רשומות.
+- **Bulk שנקטע באמצע,** למשל כשבסיס הנתונים נופל: הפריטים שנשמרו נשארים שמורים. כל אחד מהם עקבי, והלקוח צריך לטעון מחדש.
 
-## מה הייתי משפר עם יותר זמן
+## מה הייתי משפר
 
-- **אימות והרשאות (Authentication/Authorization):** עבור סביבת ריבוי-משתמשים אמיתית, כדי לשלוט בגישה למערכת ולפעולות השונות.
+- **Authentication ו-Authorization** לסביבה אמיתית.
 - **חיפוש מהיר יותר:**
-  - טווח קצר: collation בינארי בתנאי החיפוש. נמדד: פי 4.5 מהר יותר, עם אותן תוצאות על הנתונים בעברית.
-  - טווח ארוך: Full-Text Search.
-- **Idempotency Key ל-Bulk:** כדי שאפשר יהיה לשלוח שוב בבטחה פעולה שנקטעה.
+  - collation בינארי בתנאי החיפוש. נמדד: פי 4.5, עם אותן תוצאות על הנתונים בעברית.
+  - Full-Text Search בהיקף גדול יותר.
 
 ## שימוש ב-AI
-נעשה שימוש ב-Claude Code כחלק מתהליך הפיתוח לאורך המבדק, לסיוע במימוש והרחבת רכיבים ב-Backend וב-Angular, כתיבת בדיקות, איתור תקלות וביצוע Code Review. בנוסף, נעזרתי בו לבחינת חלופות ארכיטקטוניות, שיקולי ביצועים ומקרי קצה, למשל אופן הטיפול ב-Concurrency ואופן מימוש החיפוש מול בסיס הנתונים.
 
-ה-AI שימש ככלי עבודה וביקורת לאורך הפיתוח, אך הבחירה בפתרון הסופי, ההבנה המלאה של הקוד והאחריות עליו הן שלי. לאחר כל שינוי משמעותי עברתי על הקוד ווידאתי שאני מבינה את המימוש ואת ההשפעה שלו על המערכת, ולאחר מכן בדקתי אותו באמצעות בדיקות אוטומטיות והרצה בפועל.
+נעשה שימוש ב-Claude Code לאורך המבדק:
+- מימוש רכיבים ב-Backend וב-Angular.
+- כתיבת בדיקות, איתור תקלות ו-Code Review.
+- בחינת חלופות ושיקולי ביצועים.
 
-**החלטות ושינויים שעשיתי בעצמי, על ההצעות של ה-AI:**
-- **שדות המיון:**
-  - בקוד המקורי היה מיון לפי סטטוס ועדיפות.
-  - החלטתי להסיר את המיון לפי סטטוס, ובהמשך גם את המיון לפי מטפל: לשדות עם מעט ערכים שיש להם סינון אין צורך במיון.
-  - השארתי עדיפות, שיש לה סדר עסקי, וארגון, שיש לו כ-200 ערכים.
-- **שפת ההודעות:** דרשתי שכל הודעות השגיאה של השרת יהיו בעברית, כמו הממשק. בעקבות זה טופלו גם ההודעות של ASP.NET עצמו.
+הבחירה בפתרון, ההבנה של הקוד והאחריות עליו הן שלי. אחרי כל שינוי משמעותי עברתי על הקוד, ובדקתי אותו בבדיקות אוטומטיות ובהרצה בפועל.
+
+**החלטות שקיבלתי בעצמי:**
+- **שדות המיון:** בקוד המקורי היה מיון לפי סטטוס ועדיפות. הסרתי מיון לפי סטטוס, ובהמשך גם לפי מטפל, כי לשדות עם מעט ערכים יש סינון. השארתי עדיפות, שיש לה סדר עסקי, וארגון.
+- **שפת ההודעות:** דרשתי שכל הודעות השגיאה של השרת יהיו בעברית.
 - **תוכנית העבודה:**
-  - קבעתי את הערכות הזמן לכל שלב.
-  - הקדמתי את הבדיקות הסופיות לפני התיעוד, כדי שהתיעוד יתאר את הקוד הסופי.
-- **סדר העבודה:** עבדתי משימה אחר משימה לפי התוכנית, ואישרתי כל שלב לפני המעבר לבא.
+  - קבעתי את הערכות הזמן.
+  - הקדמתי את הבדיקות הסופיות לפני התיעוד.
+  - אישרתי כל משימה לפני המעבר לבאה.
 
 **מה נבדק ולא התקבל כמו שהוא:**
-- **מדידה מול SQL Server אמיתי:** כל טענת ביצועים נמדדה בפועל (`STATISTICS IO`, Execution Plans, `sys.dm_exec_query_stats`).
-  - כך התגלה שעמוד עמוק עם OFFSET קורא 153,454 עמודים, ושה-Plan שלו לא יציב.
-  - כך גם התגלה שבמיון לפי ארגון, המיון המשני חייב להיות תאריך היצירה. אחרת SQL Server ממיין את כל הטבלה.
-- **בדיקות שמוודאות שבדיקה באמת תופסת באג (Mutation):**
-  - שבירה מכוונת של ההגנה מ-Lost Update.
-  - החלפת `switchMap` ב-`mergeMap`.
-  - הסרת ה-Invalidation.
-  - בכל אחד מהמקרים וידאתי שהבדיקה המתאימה נכשלת.
-- **בדיקות אינטגרציה מול SQL Server:** חשפו באג שבדיקות ה-Unit לא ראו. תגובות השגיאה יצאו כ-`application/json` במקום `application/problem+json`.
-- **בדיקה מקצה לקצה בדפדפן אמיתי:** חשפה שני דברים שהבדיקות האוטומטיות לא תפסו. תווית הנגישות של בחירת הסטטוס לא הגיעה ל-DOM, והתאריכים הוצגו עם AM/PM באנגלית.
-
-פירוט כל הממצאים והתיקונים: [docs/REVIEW.md](docs/REVIEW.md).
+- **כל טענת ביצועים נמדדה מול SQL Server אמיתי** (`STATISTICS IO`, Plans). כך התגלה, למשל, שעמוד עמוק קורא 153,454 עמודים, וזה תוקן.
+- **בבדיקות המרכזיות וידאתי שהבדיקה נכשלת כשמכניסים את הבאג בכוונה.** למשל, הסרת ההגנה מ-Lost Update, או `mergeMap` במקום `switchMap`.
+- **בדיקות האינטגרציה ובדיקה בדפדפן אמיתי חשפו באגים שהבדיקות האחרות לא תפסו:**
+  - Content-Type שגוי בשגיאות.
+  - תווית נגישות שלא הגיעה לדף.
+  - פורמט תאריך.
