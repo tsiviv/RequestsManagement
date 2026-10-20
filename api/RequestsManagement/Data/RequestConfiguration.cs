@@ -51,7 +51,18 @@ public class RequestConfiguration : IEntityTypeConfiguration<RequestEntity>
         builder.HasIndex(r => new { r.Priority, r.CreatedAt })
             .HasDatabaseName("IX_Requests_Priority_CreatedAt");
 
-        // Supports the unfiltered default-sort listing and date-based aggregation.
+        // Supports "a handler's queue, newest first" and handler + date-range filters:
+        // equality seek on AssignedTo, then CreatedAt is both the range predicate and the sort.
+        builder.HasIndex(r => new { r.AssignedTo, r.CreatedAt })
+            .HasDatabaseName("IX_Requests_AssignedTo_CreatedAt");
+
+        // Same shape for the exact OrganizationName filter. Free-text search
+        // (LIKE '%term%') cannot seek on this index; see docs for that trade-off.
+        builder.HasIndex(r => new { r.OrganizationName, r.CreatedAt })
+            .HasDatabaseName("IX_Requests_OrganizationName_CreatedAt");
+
+        // Supports the unfiltered default-sort listing, CreatedAt range filters and
+        // date-based aggregation.
         builder.HasIndex(r => r.CreatedAt)
             .HasDatabaseName("IX_Requests_CreatedAt");
 

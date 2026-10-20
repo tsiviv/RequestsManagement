@@ -73,7 +73,7 @@
 ### F2 – API שליפה
 | ID | משימה | תוצר מצופה | תלוי ב- | הערכה | דרישה |
 |---|---|---|---|---|---|
-| T2.1 | הרחבת `RequestQueryDto`: `OrganizationName`, `AssignedTo`, `CreatedFrom`, `CreatedTo` + ולידציה (`from <= to`, אורכי מחרוזות) | סינון משולב ב-`GetRequestsAsync`, 400 ProblemDetails לקלט לא תקין | T1.1 | 1.5h | R1 |
+| T2.1 | הרחבת `RequestQueryDto`: `OrganizationName`, `AssignedTo`, `CreatedFrom`, `CreatedTo` + ולידציה (`from <= to`, אורכי מחרוזות). בנוסף: הוספת `ThenBy(Id)` כ-tiebreaker לכל מיון (נמצא ב-T1.5: מיון לפי עמודה לא ייחודית כמו Status גורם לדפדוף לא דטרמיניסטי – שורות כפולות/חסרות בין עמודים; ה-Id כבר חלק ממפתח כל אינדקס non-clustered ולכן אין עלות) | סינון משולב ב-`GetRequestsAsync`, דפדוף יציב, 400 ProblemDetails לקלט לא תקין | T1.1 | 2h | R1 |
 | T2.2 | ריכוז המיפוי Entity→DTO ב-Projection אחד (`Expression`) לשימוש בשליפה ובעדכון | הסרת שכפול; DTO כולל `AssignedTo` | T1.1 | 1h | R1, R10 |
 | T2.3 | תיעוד: איך נמנעת טעינת הנתונים לזיכרון (`IQueryable` עד `ToListAsync`, `Skip/Take` ב-SQL, `AsNoTracking`, Projection) | סעיף ב-README | T2.1 | 0.5h | R1, R11 |
 
@@ -179,7 +179,7 @@ flowchart LR
 |---|---|
 | F0 תכנון | 3.5 |
 | F1 מודל ו-Seeding | 7.5 |
-| F2 API שליפה | 3 |
+| F2 API שליפה | 3.5 |
 | F3 סטטוס ו-Audit | 5 |
 | F4 Bulk | 4 |
 | F5 Cache | 2.5 |
@@ -187,7 +187,7 @@ flowchart LR
 | F7 ביצועים | 4.5 |
 | F8 בדיקות | 7.5 |
 | F9 תיעוד והגשה | 5.5 |
-| **סה"כ** | **54.5h (כ-7 ימי עבודה)** |
+| **סה"כ** | **55h (כ-7 ימי עבודה)** |
 
 רזרבה מומלצת: 15% (כ-8h). המקורות העיקריים לסיכון הם זמן ה-Seeding של 100K רשומות, הקמת SQL Server לבדיקות האינטגרציה, וממצאי ביצועים שיחייבו שינוי אינדקסים.
 

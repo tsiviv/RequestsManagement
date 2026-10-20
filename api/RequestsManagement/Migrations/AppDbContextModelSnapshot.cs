@@ -71,6 +71,12 @@ namespace RequestsManagement.Migrations
                     b.HasIndex("UpdatedAt")
                         .HasDatabaseName("IX_Requests_UpdatedAt");
 
+                    b.HasIndex("AssignedTo", "CreatedAt")
+                        .HasDatabaseName("IX_Requests_AssignedTo_CreatedAt");
+
+                    b.HasIndex("OrganizationName", "CreatedAt")
+                        .HasDatabaseName("IX_Requests_OrganizationName_CreatedAt");
+
                     b.HasIndex("Priority", "CreatedAt")
                         .HasDatabaseName("IX_Requests_Priority_CreatedAt");
 
