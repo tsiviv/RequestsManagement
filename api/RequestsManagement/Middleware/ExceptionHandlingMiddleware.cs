@@ -11,6 +11,19 @@ public class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Exception
         {
             await next(context);
         }
+        catch (Exception) when (context.RequestAborted.IsCancellationRequested)
+        {
+            // The client went away (e.g. Angular switchMap cancelling a superseded search), so the
+            // CancellationToken aborted the I/O. Not a server error: nobody is left to read a 500,
+            // and logging it as Error would flood the log during normal typing. Filtering on the
+            // token rather than the exception type also covers providers that surface the abort
+            // as their own exception.
+            logger.LogInformation("Request {Method} {Path} was cancelled by the client", context.Request.Method, context.Request.Path);
+            if (!context.Response.HasStarted)
+            {
+                context.Response.StatusCode = StatusCodes.Status499ClientClosedRequest;
+            }
+        }
         catch (Exception ex)
         {
             await HandleAsync(context, ex);
@@ -33,7 +46,10 @@ public class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Exception
         }
         else
         {
-            logger.LogWarning("{Title}: {Message}", title, ex.Message);
+            // Client errors are expected traffic, not warnings. Messages are the app's own
+            // exception texts (ids, enum names), never request bodies or header values.
+            logger.LogInformation("{Method} {Path} -> {StatusCode} {Title}: {Message}",
+                context.Request.Method, context.Request.Path, statusCode, title, ex.Message);
         }
 
         var problemDetails = new ProblemDetails

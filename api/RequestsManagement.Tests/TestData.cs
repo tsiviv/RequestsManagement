@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using RequestsManagement.Data;
 using RequestsManagement.Enums;
 using RequestsManagement.Exceptions;
@@ -16,8 +18,26 @@ internal static class TestData
 
     public const string TestUser = "test-user";
 
-    public static RequestService CreateService(AppDbContext context, ICurrentUser? currentUser = null) =>
-        new(context, currentUser ?? new StubCurrentUser(TestUser));
+    public static RequestService CreateService(AppDbContext context, ICurrentUser? currentUser = null, ILogger<RequestService>? logger = null) =>
+        new(context, currentUser ?? new StubCurrentUser(TestUser), logger ?? NullLogger<RequestService>.Instance);
+
+    // Records log entries (level, rendered message, structured values) so tests can assert on them.
+    public sealed class ListLogger<T> : ILogger<T>
+    {
+        public List<(LogLevel Level, string Message, IReadOnlyDictionary<string, object?> Values)> Entries { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            var values = state is IEnumerable<KeyValuePair<string, object?>> pairs
+                ? pairs.ToDictionary(p => p.Key, p => p.Value)
+                : new Dictionary<string, object?>();
+            Entries.Add((logLevel, formatter(state, exception), values));
+        }
+    }
 
     // Header parsing is tested separately (HeaderCurrentUserTests); service tests only need a user.
     public sealed class StubCurrentUser(string userName) : ICurrentUser

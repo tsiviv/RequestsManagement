@@ -1,5 +1,6 @@
 using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using RequestsManagement.Data;
 using RequestsManagement.Extensions;
 using RequestsManagement.Middleware;
@@ -18,7 +19,11 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"))
+        // EF logs a client-cancelled connection open as an Error. Real connection failures still
+        // surface as a 500 that ExceptionHandlingMiddleware logs at Error with the exception, so
+        // demoting EF's own entry removes false alarms without hiding outages.
+        .ConfigureWarnings(w => w.Log((RelationalEventId.ConnectionError, LogLevel.Information))));
 
 builder.Services.AddApplicationServices();
 

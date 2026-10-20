@@ -9,7 +9,7 @@ using RequestsManagement.Policies;
 
 namespace RequestsManagement.Services;
 
-public class RequestService(AppDbContext db, ICurrentUser currentUser) : IRequestService
+public class RequestService(AppDbContext db, ICurrentUser currentUser, ILogger<RequestService> logger) : IRequestService
 {
     private static readonly string[] SortableFields =
         ["status", "priority", "createdat", "updatedat"];
@@ -179,6 +179,7 @@ public class RequestService(AppDbContext db, ICurrentUser currentUser) : IReques
         // Not a substitute for the database check below, which still catches concurrent writers.
         if (!entity.RowVersion.AsSpan().SequenceEqual(rowVersion))
         {
+            logger.LogWarning("Status update of request {RequestId} rejected: client RowVersion is stale", id);
             throw new ConcurrencyConflictException(
                 $"Request {id} was modified by another user since it was loaded. Reload and try again.");
         }
@@ -188,6 +189,7 @@ public class RequestService(AppDbContext db, ICurrentUser currentUser) : IReques
         db.Entry(entity).Property(r => r.RowVersion).OriginalValue = rowVersion;
 
         var now = DateTime.UtcNow;
+        var previousStatus = entity.Status;
 
         // Audit row is saved by the same SaveChanges (one transaction) as the status change:
         // if the RowVersion-guarded UPDATE fails, the INSERT is rolled back with it, so there is
@@ -195,7 +197,7 @@ public class RequestService(AppDbContext db, ICurrentUser currentUser) : IReques
         db.RequestStatusHistory.Add(new RequestStatusHistoryEntity
         {
             RequestId = entity.Id,
-            PreviousStatus = entity.Status,
+            PreviousStatus = previousStatus,
             NewStatus = dto.Status,
             ChangedAt = now,
             ChangedBy = changedBy
@@ -210,9 +212,16 @@ public class RequestService(AppDbContext db, ICurrentUser currentUser) : IReques
         }
         catch (DbUpdateConcurrencyException)
         {
+            // A writer committed between our load and our save; the RowVersion-guarded UPDATE
+            // matched no row and the transaction (including the audit row) was rolled back.
+            logger.LogWarning("Status update of request {RequestId} lost a concurrent write race (detected by the database)", id);
             throw new ConcurrencyConflictException(
                 $"Request {id} was modified by another user since it was loaded. Reload and try again.");
         }
+
+        // ChangedBy is deliberately not logged: it is personal data and already lives in the audit table.
+        logger.LogInformation("Request {RequestId} status changed from {PreviousStatus} to {NewStatus}",
+            id, previousStatus, dto.Status);
 
         return entity.ToDto();
     }
