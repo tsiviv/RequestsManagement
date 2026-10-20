@@ -27,6 +27,7 @@ const ALL_COLUMNS = [
   'id',
   'title',
   'organizationName',
+  'assignedTo',
   'status',
   'priority',
   'createdAt',

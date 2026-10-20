@@ -99,6 +99,21 @@ public class RequestService(
     public Task<RequestSummaryDto> GetSummaryAsync(CancellationToken cancellationToken = default) =>
         summaryCache.GetOrCreateAsync(ComputeSummaryAsync, cancellationToken);
 
+    public async Task<RequestFilterOptionsDto> GetFilterOptionsAsync(CancellationToken cancellationToken = default)
+    {
+        // Each DISTINCT reads only the leading column of IX_Requests_OrganizationName_CreatedAt /
+        // IX_Requests_AssignedTo_CreatedAt (already in order), never the table itself.
+        var organizations = await db.Requests.AsNoTracking()
+            .Select(r => r.OrganizationName).Distinct().OrderBy(n => n)
+            .ToListAsync(cancellationToken);
+
+        var assignees = await db.Requests.AsNoTracking()
+            .Select(r => r.AssignedTo).Distinct().OrderBy(n => n)
+            .ToListAsync(cancellationToken);
+
+        return new RequestFilterOptionsDto { Organizations = organizations, Assignees = assignees };
+    }
+
     private async Task<RequestSummaryDto> ComputeSummaryAsync(CancellationToken cancellationToken)
     {
         var total = await db.Requests.AsNoTracking().CountAsync(cancellationToken);

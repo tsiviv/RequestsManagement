@@ -1,5 +1,5 @@
 import { Component, computed, inject, signal } from '@angular/core';
-import { takeUntilDestroyed, toObservable } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toObservable, toSignal } from '@angular/core/rxjs-interop';
 import { catchError, of, switchMap, tap } from 'rxjs';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -11,6 +11,7 @@ import { RequestsService } from './requests.service';
 import { CurrentUserService } from '../../core/user/current-user.service';
 import { RequestQuery } from './models/request-query.model';
 import { RequestSummary } from './models/request-summary.model';
+import { EMPTY_FILTER_OPTIONS } from './models/request-filter-options.model';
 import { RequestRecord } from './models/request.model';
 import { PagedResult } from '../../shared/models/paged-result.model';
 import { ApiError } from '../../shared/models/api-error.model';
@@ -76,8 +77,19 @@ export class RequestsPageComponent {
 
   protected readonly isFiltered = computed(() => {
     const q = this._query();
-    return Boolean(q.search) || Boolean(q.status) || Boolean(q.priority);
+    return Boolean(
+      q.search || q.status || q.priority || q.organizationName || q.assignedTo || q.createdFrom || q.createdTo,
+    );
   });
+
+  /**
+   * Choices for the organization / handler filters, loaded once. If this fails the page still works:
+   * those two lists are just empty (only "all"), every other filter is unaffected.
+   */
+  protected readonly filterOptions = toSignal(
+    this.requestsService.getFilterOptions().pipe(catchError(() => of(EMPTY_FILTER_OPTIONS))),
+    { initialValue: EMPTY_FILTER_OPTIONS },
+  );
 
   private readonly requestsTrigger = computed(() => ({
     query: this._query(),
@@ -134,6 +146,10 @@ export class RequestsPageComponent {
       search: filters.search || undefined,
       status: filters.status ?? undefined,
       priority: filters.priority ?? undefined,
+      organizationName: filters.organizationName ?? undefined,
+      assignedTo: filters.assignedTo ?? undefined,
+      createdFrom: filters.createdFrom ?? undefined,
+      createdTo: filters.createdTo ?? undefined,
       page: 1,
     }));
   }

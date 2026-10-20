@@ -30,6 +30,36 @@
     </mat-select>
   </mat-form-field>
 
+  <mat-form-field appearance="outline" class="filters__select filters__select--wide" subscriptSizing="dynamic">
+    <mat-label>ארגון</mat-label>
+    <mat-select formControlName="organizationName" aria-label="סינון לפי ארגון">
+      <mat-option value="">כל הארגונים</mat-option>
+      @for (organization of organizations(); track organization) {
+        <mat-option [value]="organization">{{ organization }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" class="filters__select" subscriptSizing="dynamic">
+    <mat-label>מטפל</mat-label>
+    <mat-select formControlName="assignedTo" aria-label="סינון לפי מטפל">
+      <mat-option value="">כל המטפלים</mat-option>
+      @for (assignee of assignees(); track assignee) {
+        <mat-option [value]="assignee">{{ assignee }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" class="filters__dates" subscriptSizing="dynamic" formGroupName="created">
+    <mat-label>תאריך יצירה</mat-label>
+    <mat-date-range-input [rangePicker]="createdPicker" aria-label="סינון לפי טווח תאריכי יצירה">
+      <input matStartDate formControlName="start" placeholder="מתאריך" />
+      <input matEndDate formControlName="end" placeholder="עד תאריך" />
+    </mat-date-range-input>
+    <mat-datepicker-toggle matIconSuffix [for]="createdPicker" />
+    <mat-date-range-picker #createdPicker />
+  </mat-form-field>
+
   <button
     type="button"
     mat-stroked-button

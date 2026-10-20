@@ -30,6 +30,15 @@ public class RequestsController(IRequestService requestService) : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>Returns the distinct organization and handler names for the exact-match filters.</summary>
+    [HttpGet("filter-options")]
+    [ProducesResponseType(typeof(RequestFilterOptionsDto), StatusCodes.Status200OK)]
+    public async Task<ActionResult<RequestFilterOptionsDto>> GetFilterOptions(CancellationToken cancellationToken)
+    {
+        var result = await requestService.GetFilterOptionsAsync(cancellationToken);
+        return Ok(result);
+    }
+
     /// <summary>Returns the status change history of a request, newest first.</summary>
     [HttpGet("{id:int}/history")]
     [ProducesResponseType(typeof(IReadOnlyList<RequestStatusHistoryDto>), StatusCodes.Status200OK)]

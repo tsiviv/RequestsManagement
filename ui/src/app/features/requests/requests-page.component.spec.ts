@@ -56,6 +56,11 @@ const SAMPLE_SUMMARY: RequestSummary = {
   byPriority: { Low: 1, Medium: 0, High: 1 },
 };
 
+const SAMPLE_FILTER_OPTIONS = {
+  organizations: ['Acme Corp', 'Globex'],
+  assignees: ['Dana', 'Yossi'],
+};
+
 function mockMatchMedia(): void {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
@@ -112,6 +117,7 @@ describe('RequestsPageComponent', () => {
     fixture = TestBed.createComponent(RequestsPageComponent);
     component = fixture.componentInstance;
     httpMock = TestBed.inject(HttpTestingController);
+    httpMock.expectOne(`${baseUrl}/filter-options`).flush(SAMPLE_FILTER_OPTIONS);
     fixture.detectChanges();
   });
 
@@ -174,6 +180,91 @@ describe('RequestsPageComponent', () => {
     expect(req.request.params.get('priority')).toBe('High');
     expect(req.request.params.get('page')).toBe('1');
     req.flush(SAMPLE_PAGED);
+  });
+
+  it('shows the handler of each request in its own column', () => {
+    flushInitialLoad();
+
+    const table = fixture.nativeElement.querySelector('table') as HTMLTableElement;
+    const headers = Array.from(table.querySelectorAll('th')).map((th) => th.textContent?.trim());
+    const handlerColumn = headers.indexOf('מטפל');
+    expect(handlerColumn).toBeGreaterThan(headers.indexOf('ארגון'));
+
+    const handlers = Array.from(table.querySelectorAll('tbody tr')).map(
+      (tr) => tr.querySelectorAll('td')[handlerColumn]?.textContent?.trim(),
+    );
+    expect(handlers).toEqual(['Dana', 'Yossi']);
+  });
+
+  it('offers the organization and handler choices loaded from the API', () => {
+    flushInitialLoad();
+
+    expect(getFilters().organizations()).toEqual(SAMPLE_FILTER_OPTIONS.organizations);
+    expect(getFilters().assignees()).toEqual(SAMPLE_FILTER_OPTIONS.assignees);
+  });
+
+  it('applies organization and handler filters immediately (exact match) and resets to page 1', async () => {
+    flushInitialLoad();
+    getTable().pageChange.emit({ pageIndex: 2, pageSize: 25, length: 200, previousPageIndex: 0 });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    httpMock.expectOne((r) => r.url === baseUrl && r.params.get('page') === '3').flush(SAMPLE_PAGED);
+
+    getFilters().form.controls.organizationName.setValue('Globex');
+    getFilters().form.controls.assignedTo.setValue('Yossi');
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const req = httpMock.expectOne((r) => r.url === baseUrl && r.params.get('assignedTo') === 'Yossi');
+    expect(req.request.params.get('organizationName')).toBe('Globex');
+    expect(req.request.params.get('page')).toBe('1');
+    req.flush(SAMPLE_PAGED);
+  });
+
+  it('sends a picked date range as a half-open range: the end day is included', async () => {
+    flushInitialLoad();
+
+    getFilters().form.controls.created.setValue({ start: new Date(2026, 6, 1), end: new Date(2026, 6, 31) });
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const req = httpMock.expectOne((r) => r.url === baseUrl && r.params.has('createdTo'));
+    expect(req.request.params.get('createdFrom')).toBe('2026-07-01');
+    // The API excludes createdTo, so the day after the picked end date is sent.
+    expect(req.request.params.get('createdTo')).toBe('2026-08-01');
+    req.flush(SAMPLE_PAGED);
+  });
+
+  it('reset clears the new filters too', async () => {
+    flushInitialLoad();
+    getFilters().form.controls.assignedTo.setValue('Dana');
+    fixture.detectChanges();
+    await fixture.whenStable();
+    httpMock.expectOne((r) => r.url === baseUrl && r.params.has('assignedTo')).flush(SAMPLE_PAGED);
+
+    getFilters().resetFilters();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const req = httpMock.expectOne((r) => r.url === baseUrl && r.method === 'GET');
+    for (const param of ['assignedTo', 'organizationName', 'createdFrom', 'createdTo']) {
+      expect(req.request.params.has(param)).toBe(false);
+    }
+    req.flush(SAMPLE_PAGED);
+  });
+
+  it('still works when the filter choices cannot be loaded', () => {
+    flushInitialLoad();
+    const second = TestBed.createComponent(RequestsPageComponent);
+    httpMock.expectOne(`${baseUrl}/filter-options`).flush('down', { status: 500, statusText: 'Server Error' });
+    second.detectChanges();
+    httpMock.expectOne((r) => r.url === baseUrl && r.method === 'GET').flush(SAMPLE_PAGED);
+    httpMock.expectOne(`${baseUrl}/summary`).flush(SAMPLE_SUMMARY);
+    second.detectChanges();
+
+    const filters = second.debugElement.query(By.directive(RequestFiltersComponent)).componentInstance as RequestFiltersComponent;
+    expect(filters.organizations()).toEqual([]);
+    expect(second.componentInstance.pagedResult()).toEqual(SAMPLE_PAGED);
   });
 
   it('requests the correct page and page size when the paginator changes', async () => {

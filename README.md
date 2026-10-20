@@ -86,6 +86,7 @@ Frontend (`ui/src/app/`):
 - `GET /api/requests` — רשימת בקשות מדופדפת, מסוננת וממוינת
 - `GET /api/requests/summary` — סה"כ ספירות לפי סטטוס ועדיפות
 - `PATCH /api/requests/{id}/status` — עדכון סטטוס של בקשה
+- `GET /api/requests/filter-options` — רשימות הארגונים והמטפלים הקיימים (Distinct, ממוין), כדי שסינוני ההתאמה המדויקת יוצגו כרשימת בחירה ולא כטקסט חופשי. נקרא מהעמודה המובילה של האינדקסים `IX_Requests_OrganizationName_CreatedAt` / `IX_Requests_AssignedTo_CreatedAt` (Index Scan, בלי Sort ובלי גישה לטבלה)
 - `GET /api/requests/{id}/history` — היסטוריית שינויי הסטטוס של בקשה, מהחדש לישן
 - `POST /api/requests/status/bulk` — עדכון סטטוס של עד 100 בקשות בקריאה אחת (פירוט בהמשך)
 

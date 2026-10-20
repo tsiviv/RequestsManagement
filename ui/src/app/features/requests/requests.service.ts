@@ -8,6 +8,7 @@ import { RequestRecord } from './models/request.model';
 import { RequestSummary } from './models/request-summary.model';
 import { UpdateRequestStatus } from './models/update-request-status.model';
 import { RequestStatusHistoryEntry } from './models/request-history.model';
+import { RequestFilterOptions } from './models/request-filter-options.model';
 import { BulkUpdateStatus, BulkUpdateStatusResult } from './models/bulk-update-status.model';
 
 /** Optional filters forwarded as query parameters only when set. */
@@ -36,6 +37,10 @@ export class RequestsService {
 
   getSummary(): Observable<RequestSummary> {
     return this.http.get<RequestSummary>(`${this.baseUrl}/summary`);
+  }
+
+  getFilterOptions(): Observable<RequestFilterOptions> {
+    return this.http.get<RequestFilterOptions>(`${this.baseUrl}/filter-options`);
   }
 
   getHistory(id: number): Observable<RequestStatusHistoryEntry[]> {

@@ -10,7 +10,12 @@
   (retry)="reloadSummary()"
 />
 
-<app-request-filters #filtersRef (filtersChange)="onFiltersChange($event)" />
+<app-request-filters
+  #filtersRef
+  [organizations]="filterOptions().organizations"
+  [assignees]="filterOptions().assignees"
+  (filtersChange)="onFiltersChange($event)"
+/>
 
 <section class="requests-panel" aria-live="polite">
   @if (loading() && !pagedResult()) {

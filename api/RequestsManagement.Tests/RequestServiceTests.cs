@@ -193,6 +193,27 @@ public class RequestServiceTests
     }
 
     [Fact]
+    public async Task GetFilterOptionsAsync_ReturnsDistinctSortedOrganizationsAndAssignees()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var now = DateTime.UtcNow;
+        await using (var seedContext = CreateContext(dbName))
+        {
+            seedContext.Requests.AddRange(
+                NewRequest("A", "Org B", RequestStatus.New, RequestPriority.Low, now, "Yossi"),
+                NewRequest("B", "Org A", RequestStatus.New, RequestPriority.Low, now, "Dana"),
+                NewRequest("C", "Org B", RequestStatus.New, RequestPriority.Low, now, "Dana"));
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var context = CreateContext(dbName);
+        var options = await CreateService(context).GetFilterOptionsAsync();
+
+        Assert.Equal(["Org A", "Org B"], options.Organizations);
+        Assert.Equal(["Dana", "Yossi"], options.Assignees);
+    }
+
+    [Fact]
     public async Task GetRequestsAsync_WithInvalidSortField_ThrowsValidationException()
     {
         await using var context = CreateContext(Guid.NewGuid().ToString());
