@@ -63,8 +63,9 @@ public class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Exception
             Instance = context.Request.Path
         };
 
-        context.Response.ContentType = "application/problem+json";
         context.Response.StatusCode = statusCode;
-        await context.Response.WriteAsJsonAsync(problemDetails);
+        // The content type must be passed here: WriteAsJsonAsync otherwise overwrites a previously
+        // set Content-Type with application/json (caught by the integration tests).
+        await context.Response.WriteAsJsonAsync(problemDetails, options: null, contentType: "application/problem+json");
     }
 }

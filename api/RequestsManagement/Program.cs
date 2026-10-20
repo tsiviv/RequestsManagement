@@ -41,8 +41,12 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
-    // `dotnet run -- --reseed` recreates the test data set from scratch.
-    await RequestSeeder.SeedAsync(db, app.Logger, reset: args.Contains("--reseed"));
+    // `dotnet run -- --reseed` recreates the test data set from scratch. Integration tests turn
+    // seeding off (Seeding:Enabled=false) and create exactly the rows each test needs.
+    if (app.Configuration.GetValue("Seeding:Enabled", true))
+    {
+        await RequestSeeder.SeedAsync(db, app.Logger, reset: args.Contains("--reseed"));
+    }
     // A no-op for the in-process cache (empty at startup), but required once the cache is shared
     // between instances (Redis): other servers would otherwise keep serving pre-reseed numbers.
     scope.ServiceProvider.GetRequiredService<IRequestSummaryCache>().Invalidate();
@@ -65,3 +69,6 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+// Lets the integration tests host the API in memory with WebApplicationFactory<Program>.
+public partial class Program;

@@ -98,7 +98,7 @@ Frontend (`ui/src/app/`):
 | `status`, `priority` | התאמה מדויקת לערך enum |
 | `organizationName`, `assignedTo` | התאמה מדויקת (לאחר Trim) — כדי לאפשר Index Seek |
 | `createdFrom`, `createdTo` | טווח חצי-פתוח: `createdFrom <= CreatedAt < createdTo`. כדי לכלול יום אחרון במלואו, שולחים את היום שאחריו |
-| `sortBy`, `sortDirection` | `createdAt` (ברירת מחדל) / `updatedAt` / `organizationName` / `id`, `asc` / `desc` (ברירת מחדל). פירוט בסעיף "מיון" |
+| `sortBy`, `sortDirection` | `createdAt` (ברירת מחדל) / `updatedAt` / `organizationName` / `priority` / `id`, `asc` / `desc` (ברירת מחדל). פירוט בסעיף "מיון" |
 | `page`, `pageSize` | `pageSize` בין 1 ל-100 (ברירת מחדל 20) |
 
 כל הפרמטרים ניתנים לשילוב. קלט לא תקין (שדה מיון לא מורשה, `createdFrom >= createdTo`, מחרוזת ארוכה מדי, תאריך לא תקין) מחזיר `400` בפורמט ProblemDetails. דוגמאות מוכנות להרצה: [RequestsManagement.http](api/RequestsManagement/RequestsManagement.http).
@@ -236,9 +236,15 @@ ORDER BY [r].[CreatedAt] DESC, [r].[Id] DESC
 | `createdAt` (ברירת מחדל) | הבקשות החדשות או הוותיקות ביותר | `CreatedAt, Id` | `IX_Requests_CreatedAt` |
 | `updatedAt` | בקשות שלא טופלו לאחרונה, או שהשתנו עכשיו | `UpdatedAt, Id` | `IX_Requests_UpdatedAt` |
 | `organizationName` | סידור ואיתור לפי ארגון (כ-200 ארגונים) | `OrganizationName, CreatedAt, Id` | `IX_Requests_OrganizationName_CreatedAt` |
+| `priority` | הדחופות קודם (`desc`), ובתוך כל עדיפות החדשות קודם | `Priority, CreatedAt, Id` | `IX_Requests_Priority_CreatedAt` (קיים, בלי Migration) |
 | `id` | סדר יציב וברור | `Id` | המפתח הראשי (Clustered) |
 
 כל השדות בסדר המלא הולכים באותו כיוון (`asc` או `desc`).
+
+**מיון לפי עדיפות:**
+- **הסדר הוא לפי דחיפות, לא לפי האלף-בית:** `Priority` נשמר כערך ה-enum (`Low=0`, `Medium=1`, `High=2`), ולכן `desc` מחזיר High ← Medium ← Low. מיון לפי השם היה מחזיר High, Low, Medium.
+- **אותו עיקרון כמו בארגון:** הסדר המלא זהה למפתח `(Priority, CreatedAt)` + `Id`. נבדק מול SQL Server (עמוד ראשון של 20, על 12,000 רשומות): `Top` מעל Index Scan בסדר הפוך (`ORDERED BACKWARD`), בלי Sort, 50 עמודים שנקראו. בלי האינדקס: Sort על Clustered Index Scan של כל הטבלה, 467 עמודים.
+- **ב-Angular:** לחיצה ראשונה על כותרת העמודה ממיינת מהדחופה ביותר (`start="desc"`), כי לשם כך ממיינים לפי עדיפות.
 
 **למה במיון לפי ארגון המיון המשני הוא תאריך היצירה ולא `Id`:**
 - **כך הסדר זהה בדיוק למפתח האינדקס:** האינדקס הוא `(OrganizationName, CreatedAt)`, ומפתח non-clustered מסתיים תמיד ב-`Id`. SQL Server קורא את האינדקס לפי הסדר ונעצר אחרי עמוד אחד.
@@ -251,19 +257,20 @@ ORDER BY [r].[CreatedAt] DESC, [r].[Id] DESC
 
 - **גם הגיוני למשתמש:** בתוך הבקשות של ארגון, הן מסודרות לפי תאריך.
 
-**אין מיון לפי סטטוס, עדיפות, מטפל או כותרת, בכוונה:**
-- **סטטוס, עדיפות ומטפל:** מעט ערכים אפשריים (4, 3 ו-15), ולכל אחד מהם יש סינון. הצורך האמיתי הוא "להציג רק את אלה", לא לסדר לפיהם.
+**אין מיון לפי סטטוס, מטפל או כותרת, בכוונה:**
+- **סטטוס ומטפל:** מעט ערכים אפשריים (4 ו-15), ולכל אחד מהם יש סינון. הצורך האמיתי הוא "להציג רק את אלה", לא לסדר לפיהם. לסטטוסים גם אין סדר טבעי אחד (Waiting אינו "יותר" או "פחות" מ-InProgress).
+- **עדיפות שונה:** יש לה סדר טבעי (דחיפות), ולכן "הדחופות קודם" על פני כל הרשימה הוא צורך אמיתי, בנוסף לסינון.
 - **ארגון שונה:** כ-200 ערכים, ולכן גם לסידור הרשימה לפיו יש ערך, בנוסף לסינון.
 - **כותרת:** טקסט חופשי שהסדר שלו כמעט חסר משמעות למשתמש, והיה דורש אינדקס נוסף.
 
-ה-API מחזיר `400` לכל שדה שאינו ברשימה, וב-Angular יש `mat-sort-header` רק לארבע העמודות האלה.
+ה-API מחזיר `400` לכל שדה שאינו ברשימה, וב-Angular יש `mat-sort-header` רק לחמש העמודות האלה.
 
 ### האינדקסים ותרחישי החיפוש והסינון
 
 | אינדקס | תרחיש | למה בסדר הזה |
 |---|---|---|
 | `IX_Requests_Status_CreatedAt` | סינון לפי סטטוס, החדשים קודם | Seek על `Status`, ואז `CreatedAt` כבר ממוין. משרת גם את `GROUP BY Status` |
-| `IX_Requests_Priority_CreatedAt` | סינון לפי עדיפות, החדשים קודם | אותו עיקרון. משרת גם את `GROUP BY Priority` |
+| `IX_Requests_Priority_CreatedAt` | סינון לפי עדיפות, החדשים קודם; מיון לפי עדיפות | אותו עיקרון. משרת גם את `GROUP BY Priority` |
 | `IX_Requests_AssignedTo_CreatedAt` | "התור של מטפל", מטפל + טווח תאריכים | Seek בשוויון על `AssignedTo`, ו-`CreatedAt` משמש גם כטווח וגם כמיון. משרת גם את רשימת המטפלים ב-`filter-options` |
 | `IX_Requests_OrganizationName_CreatedAt` | סינון לפי ארגון מדויק, מיון לפי ארגון | אותו עיקרון |
 | `IX_Requests_CreatedAt` | רשימה ללא סינון (ברירת המחדל), טווח תאריכים בלבד | Seek על טווח, ובסדר המיון |
@@ -339,14 +346,38 @@ ORDER BY [r].[CreatedAt] DESC, [r].[Id] DESC
 
 ## בדיקות
 
-- 9 בדיקות backend (xUnit)
-- 22 בדיקות frontend (Vitest)
-- סה"כ 31 בדיקות, כולן עוברות
+| פרויקט | סוג | מול | מה מכוסה |
+|---|---|---|---|
+| `api/RequestsManagement.Tests` | Unit (xUnit) | EF InMemory | לוגיקה של `RequestService`: סינון, מיון, דפדוף, מעברי סטטוס (כל 16 הצירופים), Audit, Bulk, Cache ו-Invalidation, זיהוי המשתמש, Logging |
+| `api/RequestsManagement.IntegrationTests` | Integration (xUnit + `WebApplicationFactory`) | **SQL Server אמיתי** | ה-API מקצה לקצה דרך HTTP: SQL שנוצר בפועל, `rowversion`, טרנזקציות, ProblemDetails |
+| `ui` | Unit/Component (Vitest) | `HttpTestingController` | Debounce, ביטול בקשות קודמות, מצבי Loading/Empty/Error, 409/400, Bulk, היסטוריה, Aggregations |
+
+**בדיקות האינטגרציה מכסות מה ש-InMemory לא יכול:**
+- **Concurrency אמיתי:** 8 עדכונים מקבילים עם אותו `rowVersion`. בדיוק אחד מקבל `200`, השאר `409`, ונרשמת שורת היסטוריה אחת בלבד, של המנצח.
+- **Lost Update:** עדכון שני עם `rowVersion` ישן מקבל `409`, ולא דורס את הראשון.
+- **קונפליקט שמתגלה רק ב-`SaveChanges`:** משתמש אחר עושה commit בין הטעינה לשמירה. שורת ה-Audit מתבטלת יחד עם ה-`UPDATE`, באותה טרנזקציה.
+- **Validation דרך ה-pipeline האמיתי:** `400` / `404` כ-`application/problem+json`, בלי שינוי בנתונים.
+- **Bulk עם הצלחה חלקית:** כל פריט מקבל את התוצאה הנכונה, וכך גם בסיס הנתונים וההיסטוריה.
+- **ה-Summary מתעדכן מיד** אחרי עדכון בודד ואחרי Bulk.
+
+**הרצה:**
+
+```bash
+cd api
+dotnet test                                    # Unit + Integration
+dotnet test RequestsManagement.IntegrationTests   # רק Integration
+cd ../ui && npx ng test --watch=false          # Frontend
+```
+
+**בדיקות האינטגרציה צריכות SQL Server:**
+- **ברירת המחדל היא LocalDB** (`(localdb)\MSSQLLocalDB`).
+- **שרת אחר:** מגדירים את משתנה הסביבה `REQUESTS_IT_SQLSERVER` ל-connection string בלי שם מסד, למשל בהרצה ב-CI.
+- **מסד ייחודי לכל הרצה:** נוצר על ידי ה-migrations של האפליקציה, ונמחק בסוף. כל בדיקה מתחילה מטבלאות ריקות.
+- **בלי Seeding:** האפליקציה עולה עם `Seeding:Enabled=false`, וכל בדיקה יוצרת רק את השורות שהיא צריכה.
 
 ## מה הייתי משפר עם יותר זמן
 
 - **אימות והרשאות (Authentication/Authorization)** — עבור סביבת ריבוי-משתמשים אמיתית, כדי לשלוט בגישה למערכת ולפעולות השונות.
-- **בדיקות אינטגרציה רחבות יותר** — בדיקות מול מופע SQL Server אמיתי, בנוסף לבדיקות הקיימות מול InMemory.
 - **חיפוש טקסט מלא (Full-text search)** — אם מערך הנתונים יגדל משמעותית מעבר לגודלו הנוכחי, כדי לשפר את ביצועי החיפוש ולתת פתרון מתאים יותר ל-scale גדול.
 
 ## שימוש ב-AI

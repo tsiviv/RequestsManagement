@@ -28,10 +28,13 @@
 | ↳ `COUNT` | **17** reads, 4 ms | Seek על שני אינדקסים + Hash Match | 2,539 reads, 45 ms | Clustered Scan |
 | סינון לפי ארגון | **71** reads, 2 ms | Index Seek | 2,539 reads, 61 ms | Clustered Scan + Sort |
 | מיון לפי ארגון, עמוד 1 | **71** reads, 2 ms | Index Scan מסודר, בלי Sort | 2,539 reads, 1,400 ms | Clustered Scan + Sort |
+| מיון לפי עדיפות (הדחופות קודם), עמוד 1 \* | **50** reads, 2 ms | Index Scan בסדר הפוך, בלי Sort | 467 reads, 30 ms | Clustered Scan + Sort |
 | חיפוש טקסט חופשי, עמוד | 606 reads, 5 ms | Index Scan לפי תאריך עד שנמצאו 20 התאמות | 2,539 reads, 1,093 ms | Clustered Scan + Sort |
 | ↳ `COUNT` לחיפוש | 2,539 reads, **528–1,106 ms** | Clustered Scan, אין אינדקס שעוזר | 2,539 reads, 1,060 ms | Clustered Scan |
 | `COUNT` ללא סינון | 536 reads, **60–71 ms** | Index Scan של האינדקס הצר ביותר | 2,539 reads, 61 ms | Clustered Scan |
 | עמוד עמוק 2,501 (OFFSET 50,000) | **153,454** reads, 335 ms | Index Scan + **50,020 Key Lookups** | 2,539 reads, 395 ms | Clustered Scan + Sort |
+
+\* נמדד על 12,000 רשומות, ולא על 100,000 (תרחיש L7 ב-[perf/measure-queries.sql](perf/measure-queries.sql)). צורת ה-Plan לא תלויה בגודל הטבלה: עמוד ראשון נקרא מהאינדקס ונעצר אחרי 20 שורות, ובלי האינדקס עלות ה-Sort גדלה עם הטבלה. מדידה חוזרת על 100,000 רשומות היא חלק מ-T10.6.
 
 ### פעולה 2: `GET /api/requests/summary` (Aggregations, כשהערך לא ב-Cache)
 
@@ -53,7 +56,7 @@
 | אינדקס | נוסף בשביל |
 |---|---|
 | `IX_Requests_Status_CreatedAt` | סינון לפי סטטוס עם "החדשים קודם", ו-`GROUP BY Status` ב-Summary |
-| `IX_Requests_Priority_CreatedAt` | סינון לפי עדיפות עם "החדשים קודם", ו-`GROUP BY Priority` |
+| `IX_Requests_Priority_CreatedAt` | סינון לפי עדיפות עם "החדשים קודם", מיון לפי עדיפות (`Priority, CreatedAt, Id` זהה למפתח), ו-`GROUP BY Priority` |
 | `IX_Requests_AssignedTo_CreatedAt` | סינון לפי מטפל (ומטפל + טווח תאריכים), ורשימת המטפלים ב-`filter-options` |
 | `IX_Requests_OrganizationName_CreatedAt` | סינון ומיון לפי ארגון, ורשימת הארגונים ב-`filter-options` |
 | `IX_Requests_CreatedAt` | רשימת ברירת המחדל (החדשים קודם) וטווח תאריכים בלבד |

@@ -12,6 +12,10 @@ Accept: application/json
 GET {{RequestsManagement_HostAddress}}/api/requests?search=חשבונית&priority=High
 Accept: application/json
 
+### Sort by priority: most urgent first (High > Medium > Low), newest first within each priority
+GET {{RequestsManagement_HostAddress}}/api/requests?sortBy=priority&sortDirection=desc
+Accept: application/json
+
 ### Validation error (400): createdFrom must be earlier than createdTo
 GET {{RequestsManagement_HostAddress}}/api/requests?createdFrom=2026-08-01&createdTo=2026-07-01
 Accept: application/json
