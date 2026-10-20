@@ -7,6 +7,7 @@ import { MatPaginatorIntl } from '@angular/material/paginator';
 
 import { routes } from './app.routes';
 import { httpErrorInterceptor } from './core/interceptors/http-error.interceptor';
+import { userNameInterceptor } from './core/interceptors/user-name.interceptor';
 import { HebrewPaginatorIntl } from './core/i18n/hebrew-paginator-intl';
 
 registerLocaleData(localeHe);
@@ -15,7 +16,7 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideBrowserGlobalErrorListeners(),
     provideRouter(routes),
-    provideHttpClient(withFetch(), withInterceptors([httpErrorInterceptor])),
+    provideHttpClient(withFetch(), withInterceptors([userNameInterceptor, httpErrorInterceptor])),
     { provide: LOCALE_ID, useValue: 'he' },
     { provide: MatPaginatorIntl, useClass: HebrewPaginatorIntl },
   ],

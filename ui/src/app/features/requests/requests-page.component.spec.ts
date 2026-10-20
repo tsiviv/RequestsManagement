@@ -11,6 +11,9 @@ import { RequestRecord } from './models/request.model';
 import { PagedResult } from '../../shared/models/paged-result.model';
 import { RequestSummary } from './models/request-summary.model';
 import { httpErrorInterceptor } from '../../core/interceptors/http-error.interceptor';
+import { userNameInterceptor } from '../../core/interceptors/user-name.interceptor';
+import { CurrentUserService } from '../../core/user/current-user.service';
+import { MatSnackBar } from '@angular/material/snack-bar';
 
 const baseUrl = `${environment.apiUrl}/requests`;
 
@@ -19,6 +22,7 @@ const SAMPLE_ITEMS: RequestRecord[] = [
     id: 1,
     title: 'First request',
     organizationName: 'Acme Corp',
+    assignedTo: 'Dana',
     status: 'New',
     priority: 'Low',
     createdAt: '2026-01-01T00:00:00Z',
@@ -29,6 +33,7 @@ const SAMPLE_ITEMS: RequestRecord[] = [
     id: 2,
     title: 'Second request',
     organizationName: 'Globex',
+    assignedTo: 'Yossi',
     status: 'InProgress',
     priority: 'High',
     createdAt: '2026-01-02T00:00:00Z',
@@ -93,13 +98,16 @@ describe('RequestsPageComponent', () => {
 
   beforeEach(() => {
     mockMatchMedia();
+    localStorage.clear();
     TestBed.configureTestingModule({
       imports: [RequestsPageComponent],
       providers: [
-        provideHttpClient(withInterceptors([httpErrorInterceptor])),
+        provideHttpClient(withInterceptors([userNameInterceptor, httpErrorInterceptor])),
         provideHttpClientTesting(),
       ],
     });
+    // Status updates require a name (recorded as ChangedBy); individual tests may clear it.
+    TestBed.inject(CurrentUserService).setUserName('דנה כהן');
 
     fixture = TestBed.createComponent(RequestsPageComponent);
     component = fixture.componentInstance;
@@ -110,6 +118,7 @@ describe('RequestsPageComponent', () => {
   afterEach(() => {
     httpMock.verify();
     vi.useRealTimers();
+    localStorage.clear();
   });
 
   it('loads requests on initial load', () => {
@@ -237,6 +246,7 @@ describe('RequestsPageComponent', () => {
     const patchReq = httpMock.expectOne(`${baseUrl}/${row.id}/status`);
     expect(patchReq.request.method).toBe('PATCH');
     expect(patchReq.request.body).toEqual({ status: 'InProgress', rowVersion: row.rowVersion });
+    expect(patchReq.request.headers.get('X-User-Name')).toBe(encodeURIComponent('דנה כהן'));
 
     const updated: RequestRecord = { ...row, status: 'InProgress', rowVersion: 'AAAAAAAAAAM=' };
     patchReq.flush(updated);
@@ -265,6 +275,19 @@ describe('RequestsPageComponent', () => {
 
     const reloadReq = httpMock.expectOne((r) => r.url === baseUrl && r.method === 'GET');
     reloadReq.flush(SAMPLE_PAGED);
+  });
+
+  it('blocks a status update without a user name, explaining why, and sends nothing', () => {
+    flushInitialLoad();
+    TestBed.inject(CurrentUserService).setUserName('');
+    const snackBarOpen = vi.spyOn(TestBed.inject(MatSnackBar), 'open');
+
+    const row = SAMPLE_ITEMS[0];
+    getTable().statusChange.emit({ row, status: 'InProgress' });
+
+    httpMock.expectNone(`${baseUrl}/${row.id}/status`);
+    expect(component.updatingIds().has(row.id)).toBe(false);
+    expect(snackBarOpen).toHaveBeenCalledWith(expect.stringContaining('יש להזין את שמך'), 'סגור', expect.anything());
   });
 
   it('leaves the row and update state unchanged when a status update fails', async () => {

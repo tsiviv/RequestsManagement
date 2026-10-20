@@ -42,6 +42,10 @@ export class RequestStatusActionComponent {
     this.control.valueChanges.pipe(takeUntilDestroyed()).subscribe((value) => {
       if (value !== this.status()) {
         this.statusChange.emit(value);
+        // The select shows the request's actual status, not the requested one: it only changes
+        // when the parent passes in the updated status after a successful save. Otherwise a
+        // rejected or blocked update would leave the select showing a status that was never saved.
+        this.control.setValue(this.status(), { emitEvent: false });
       }
     });
   }

@@ -7,6 +7,21 @@ import { RequestQuery } from './models/request-query.model';
 import { RequestRecord } from './models/request.model';
 import { RequestSummary } from './models/request-summary.model';
 import { UpdateRequestStatus } from './models/update-request-status.model';
+import { RequestStatusHistoryEntry } from './models/request-history.model';
+import { BulkUpdateStatus, BulkUpdateStatusResult } from './models/bulk-update-status.model';
+
+/** Optional filters forwarded as query parameters only when set. */
+const OPTIONAL_QUERY_PARAMS = [
+  'search',
+  'status',
+  'priority',
+  'organizationName',
+  'assignedTo',
+  'createdFrom',
+  'createdTo',
+  'sortBy',
+  'sortDirection',
+] as const satisfies readonly (keyof RequestQuery)[];
 
 @Injectable({ providedIn: 'root' })
 export class RequestsService {
@@ -23,27 +38,26 @@ export class RequestsService {
     return this.http.get<RequestSummary>(`${this.baseUrl}/summary`);
   }
 
+  getHistory(id: number): Observable<RequestStatusHistoryEntry[]> {
+    return this.http.get<RequestStatusHistoryEntry[]>(`${this.baseUrl}/${id}/history`);
+  }
+
   updateStatus(id: number, update: UpdateRequestStatus): Observable<RequestRecord> {
     return this.http.patch<RequestRecord>(`${this.baseUrl}/${id}/status`, update);
+  }
+
+  bulkUpdateStatus(update: BulkUpdateStatus): Observable<BulkUpdateStatusResult> {
+    return this.http.post<BulkUpdateStatusResult>(`${this.baseUrl}/status/bulk`, update);
   }
 
   private toHttpParams(query: RequestQuery): HttpParams {
     let params = new HttpParams().set('page', query.page).set('pageSize', query.pageSize);
 
-    if (query.search) {
-      params = params.set('search', query.search);
-    }
-    if (query.status) {
-      params = params.set('status', query.status);
-    }
-    if (query.priority) {
-      params = params.set('priority', query.priority);
-    }
-    if (query.sortBy) {
-      params = params.set('sortBy', query.sortBy);
-    }
-    if (query.sortDirection) {
-      params = params.set('sortDirection', query.sortDirection);
+    for (const key of OPTIONAL_QUERY_PARAMS) {
+      const value = query[key];
+      if (value) {
+        params = params.set(key, value);
+      }
     }
 
     return params;

@@ -8,6 +8,7 @@ import { MatSnackBar } from '@angular/material/snack-bar';
 import { Sort } from '@angular/material/sort';
 import { PageEvent } from '@angular/material/paginator';
 import { RequestsService } from './requests.service';
+import { CurrentUserService } from '../../core/user/current-user.service';
 import { RequestQuery } from './models/request-query.model';
 import { RequestSummary } from './models/request-summary.model';
 import { RequestRecord } from './models/request.model';
@@ -47,6 +48,7 @@ const DEFAULT_QUERY: RequestQuery = {
 export class RequestsPageComponent {
   private readonly requestsService = inject(RequestsService);
   private readonly snackBar = inject(MatSnackBar);
+  private readonly currentUser = inject(CurrentUserService);
 
   private readonly _query = signal<RequestQuery>(DEFAULT_QUERY);
   private readonly _pagedResult = signal<PagedResult<RequestRecord> | null>(null);
@@ -164,6 +166,14 @@ export class RequestsPageComponent {
   protected onStatusChange(event: RequestStatusChangeEvent): void {
     const { row, status } = event;
     if (this._updatingIds().has(row.id)) {
+      return;
+    }
+
+    // The server rejects changes without a name (400); say why up front instead of a generic error.
+    if (!this.currentUser.hasUserName()) {
+      this.snackBar.open('יש להזין את שמך בשדה שבראש העמוד לפני עדכון סטטוס. השם נרשם בהיסטוריית השינויים.', 'סגור', {
+        duration: 6000,
+      });
       return;
     }
 

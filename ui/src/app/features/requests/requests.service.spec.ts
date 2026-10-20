@@ -6,6 +6,8 @@ import { environment } from '../../../environments/environment';
 import { RequestQuery } from './models/request-query.model';
 import { RequestRecord } from './models/request.model';
 import { PagedResult } from '../../shared/models/paged-result.model';
+import { RequestStatusHistoryEntry } from './models/request-history.model';
+import { BulkUpdateStatus, BulkUpdateStatusResult } from './models/bulk-update-status.model';
 
 describe('RequestsService', () => {
   let service: RequestsService;
@@ -60,6 +62,68 @@ describe('RequestsService', () => {
     expect(result).toEqual(response);
   });
 
+  it('sends the organization, handler and date-range filters', () => {
+    service
+      .getRequests({
+        page: 1,
+        pageSize: 20,
+        organizationName: 'רכבת ישראל - סניף חיפה',
+        assignedTo: 'דנה כהן',
+        createdFrom: '2026-07-01',
+        createdTo: '2026-08-01',
+      })
+      .subscribe();
+
+    const req = httpMock.expectOne((r) => r.url === baseUrl && r.method === 'GET');
+    expect(req.request.params.get('organizationName')).toBe('רכבת ישראל - סניף חיפה');
+    expect(req.request.params.get('assignedTo')).toBe('דנה כהן');
+    expect(req.request.params.get('createdFrom')).toBe('2026-07-01');
+    expect(req.request.params.get('createdTo')).toBe('2026-08-01');
+    req.flush({ items: [], totalCount: 0, page: 1, pageSize: 20, totalPages: 0 });
+  });
+
+  it('requests the status history of a request', () => {
+    let result: RequestStatusHistoryEntry[] | undefined;
+    service.getHistory(7).subscribe((r) => (result = r));
+
+    const req = httpMock.expectOne(`${baseUrl}/7/history`);
+    expect(req.request.method).toBe('GET');
+    const history: RequestStatusHistoryEntry[] = [
+      { id: 1, previousStatus: 'New', newStatus: 'InProgress', changedAt: '2026-08-01T10:00:00Z', changedBy: 'דנה' },
+    ];
+    req.flush(history);
+
+    expect(result).toEqual(history);
+  });
+
+  it('posts a bulk status update with a rowVersion per request', () => {
+    const update: BulkUpdateStatus = {
+      status: 'Completed',
+      items: [
+        { id: 1, rowVersion: 'AAAAAAAAAAE=' },
+        { id: 2, rowVersion: 'AAAAAAAAAAI=' },
+      ],
+    };
+    let result: BulkUpdateStatusResult | undefined;
+    service.bulkUpdateStatus(update).subscribe((r) => (result = r));
+
+    const req = httpMock.expectOne(`${baseUrl}/status/bulk`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.body).toEqual(update);
+    const response: BulkUpdateStatusResult = {
+      requested: 2,
+      updated: 1,
+      failed: 1,
+      results: [
+        { id: 1, outcome: 'Updated', error: null, request: null },
+        { id: 2, outcome: 'Conflict', error: 'modified by another user', request: null },
+      ],
+    };
+    req.flush(response);
+
+    expect(result).toEqual(response);
+  });
+
   it('omits optional filters from the query string when not provided', () => {
     service.getRequests({ page: 1, pageSize: 20 }).subscribe();
 
@@ -70,6 +134,10 @@ describe('RequestsService', () => {
     expect(req.request.params.has('priority')).toBe(false);
     expect(req.request.params.has('sortBy')).toBe(false);
     expect(req.request.params.has('sortDirection')).toBe(false);
+    expect(req.request.params.has('organizationName')).toBe(false);
+    expect(req.request.params.has('assignedTo')).toBe(false);
+    expect(req.request.params.has('createdFrom')).toBe(false);
+    expect(req.request.params.has('createdTo')).toBe(false);
 
     req.flush({ items: [], totalCount: 0, page: 1, pageSize: 20, totalPages: 0 });
   });
@@ -92,6 +160,7 @@ describe('RequestsService', () => {
       id: 42,
       title: 'Sample',
       organizationName: 'Acme',
+      assignedTo: 'Dana',
       status: 'Completed',
       priority: 'Low',
       createdAt: '2026-01-01T00:00:00Z',

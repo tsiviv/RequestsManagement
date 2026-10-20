@@ -41,6 +41,7 @@ export interface RequestRecord {
   id: number;
   title: string;
   organizationName: string;
+  assignedTo: string;
   status: RequestStatus;
   priority: RequestPriority;
   createdAt: string;
