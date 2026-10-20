@@ -66,6 +66,7 @@ Backend (`api/RequestsManagement/`):
 - `Controllers/` — נקודות הקצה של ה-HTTP
 - `Services/` — לוגיקה עסקית: סינון, מיון, אגרגציה, עדכוני סטטוס
 - `DTOs/` — מבני הבקשה/תגובה
+- `Mapping/` — מיפוי יחיד Entity→DTO (Expression שמתורגם ל-SQL, וגרסה מקומפלת לאובייקטים בזיכרון)
 - `Models/` — ישויות EF Core
 - `Data/` — DbContext, הגדרת הישויות, seeding
 - `Enums/` — ערכי סטטוס ועדיפות
@@ -83,7 +84,18 @@ Frontend (`ui/src/app/`):
 - `GET /api/requests/summary` — סה"כ ספירות לפי סטטוס ועדיפות
 - `PATCH /api/requests/{id}/status` — עדכון סטטוס של בקשה
 
-נקודת הקצה של הרשימה תומכת בחיפוש, סינון לפי סטטוס/עדיפות, מיון ופאג'ינציה.
+נקודת הקצה של הרשימה תומכת ב:
+
+| פרמטר | התנהגות |
+|---|---|
+| `search` | חיפוש חלקי ב-`Title` או ב-`OrganizationName` (עד 200 תווים) |
+| `status`, `priority` | התאמה מדויקת לערך enum |
+| `organizationName`, `assignedTo` | התאמה מדויקת (לאחר Trim) — כדי לאפשר Index Seek |
+| `createdFrom`, `createdTo` | טווח חצי-פתוח: `createdFrom <= CreatedAt < createdTo`. כדי לכלול יום אחרון במלואו, שולחים את היום שאחריו |
+| `sortBy`, `sortDirection` | `status` / `priority` / `createdAt` / `updatedAt`, `asc` / `desc` |
+| `page`, `pageSize` | `pageSize` בין 1 ל-100 (ברירת מחדל 20) |
+
+כל הפרמטרים ניתנים לשילוב. קלט לא תקין (שדה מיון לא מורשה, `createdFrom >= createdTo`, מחרוזת ארוכה מדי, תאריך לא תקין) מחזיר `400` בפורמט ProblemDetails. דוגמאות מוכנות להרצה: [RequestsManagement.http](api/RequestsManagement/RequestsManagement.http).
 
 ## האתגר שנבחר – Concurrency
 
@@ -99,14 +111,66 @@ Frontend (`ui/src/app/`):
 - **Pessimistic locking** לא מתאים היטב ל-REST API חסר מצב (stateless) — עדכון סטטוס בודד וקצר אין לו נקודה טבעית לנעילה או שחרור נעילה.
 - **Optimistic concurrency** מתאים כאן: אין session או נעילה לנהל בצד השרת, הבדיקה היא השוואת גרסה בודדת על גבי העדכון הקיים, וההתנגשויות נדירות מספיק כך שכישלון מהיר עם שגיאה ברורה הוא הפשרה הנכונה.
 
-## ביצועים
+## שליפת נתונים: מניעת טעינה לזיכרון ואינדקסים
 
-- סינון, חיפוש, מיון ופאג'ינציה מתבצעים כולם בבסיס הנתונים — התוצאות לא נטענות לזיכרון לפני הצמצום.
-- ספירות הסיכום מחושבות באמצעות aggregation בבסיס הנתונים, לא בקוד האפליקציה.
-- תבניות השאילתה הנפוצות ביותר (סינון לפי סטטוס או עדיפות, ממוין לפי תאריך) נתמכות באמצעות אינדקסים ייעודיים בבסיס הנתונים.
-- מיון מותר רק לפי `Status`, `Priority`, `CreatedAt` ו-`UpdatedAt` — גם ב-API (רשימת שדות מורשית קשיחה ב-`RequestService`, כל ערך אחר מוחזר כ-`400`) וגם בטבלת ה-Angular (רק לעמודות אלו יש `mat-sort-header`). לכל אחד מארבעת השדות יש אינדקס ייעודי, כך שמיון תמיד מתבצע כסריקת אינדקס מסודרת (Index Scan) ולא כ-Sort על כל הטבלה.
-- `Title` ו-`OrganizationName` נתמכים בחיפוש אך לא במיון בכוונה: מיון חופשי על עמודות טקסט לא-מוגבלות (בפרט ב-offset עמוק) דורש Sort על כל הטבלה שעלול "להישפך" ל-tempdb ולהיתקע לעשרות שניות תחת עומס דיסק/אנטי-וירוס — לכן הוחלט להגביל מיון לעמודות הקבועות (סטטוס/עדיפות/תאריכים) שיש להן אינדקס תומך, במקום להוסיף אינדקס לכל עמודה שאפשר יהיה למיין לפיה.
-- נבדק מול מלוא מערך הנתונים של 12,000 רשומות.
+### איך נמנעת טעינת כלל הנתונים לזיכרון
+
+`RequestService.GetRequestsAsync` בונה `IQueryable` ומבצע את כל העבודה בבסיס הנתונים. לזיכרון מגיעות רק השורות של העמוד המבוקש:
+
+1. **`db.Requests.AsNoTracking()`** — שום דבר עוד לא נשלף. בנוסף, אין מעקב שינויים, כי זו שליפה לקריאה בלבד.
+2. **כל פילטר מוסיף `Where`** לאותו `IQueryable`, ו-EF מתרגם אותו ל-`WHERE` עם פרמטרים. הפרמטרים מאפשרים שימוש חוזר ב-Execution Plan ומונעים SQL Injection.
+3. **`CountAsync`** — `SELECT COUNT(*)` עם אותו `WHERE`. חוזר מספר אחד בלבד.
+4. **עמוד מעבר לסוף התוצאות** — אם ה-offset גדול או שווה לסך התוצאות, השאילתה השנייה לא נשלחת בכלל.
+5. **`ApplySort` + `Skip/Take`** מתורגמים ל-`ORDER BY ... , Id` ול-`OFFSET/FETCH`.
+6. **`Select(RequestMappings.ToDtoProjection)`** — נשלפות רק העמודות של ה-DTO, ולא ישויות מלאות.
+7. **`ToListAsync`** — זו נקודת ה-materialization היחידה, ומגיעות בה לכל היותר `pageSize` שורות (100 לכל היותר).
+
+ה-SQL שנוצר בפועל (סינון לפי מטפל וטווח תאריכים, מיון לפי סטטוס):
+
+```sql
+SELECT [r].[Id], [r].[Title], [r].[OrganizationName], [r].[AssignedTo], [r].[Status],
+       [r].[Priority], [r].[CreatedAt], [r].[UpdatedAt], [r].[RowVersion]
+FROM [Requests] AS [r]
+WHERE [r].[AssignedTo] = @__assignedTo_0
+  AND [r].[CreatedAt] >= @__query_CreatedFrom_Value_1 AND [r].[CreatedAt] < @__query_CreatedTo_Value_2
+ORDER BY [r].[Status] DESC, [r].[Id] DESC
+OFFSET @__p_3 ROWS FETCH NEXT @__p_4 ROWS ONLY
+```
+
+גם ה-Summary מחושב ב-`GROUP BY` בבסיס הנתונים, כך שחוזרות 4 שורות לסטטוס ו-3 לעדיפות, ולא 100,000 רשומות.
+
+**הגנות נוספות:**
+- **`pageSize` מוגבל ל-100.**
+- **רשימה מורשית של שדות מיון:** אין אפשרות למיין לפי עמודה שאין לה אינדקס תומך.
+- **`Id` כ-tiebreaker בכל מיון:** בלעדיו, שורות עם ערך מיון זהה, למשל כ-55,000 פניות בסטטוס Completed, יכולות להופיע פעמיים או להיעלם בין עמודים. ה-`Id` כבר חלק מהמפתח של כל אינדקס non-clustered, ולכן ה-tiebreaker לא מוסיף Sort.
+
+### האינדקסים ותרחישי החיפוש והסינון
+
+| אינדקס | תרחיש | למה בסדר הזה |
+|---|---|---|
+| `IX_Requests_Status_CreatedAt` | סינון לפי סטטוס, החדשים קודם | Seek על `Status`, ואז `CreatedAt` כבר ממוין. משרת גם את `GROUP BY Status` |
+| `IX_Requests_Priority_CreatedAt` | סינון לפי עדיפות, החדשים קודם | אותו עיקרון. משרת גם את `GROUP BY Priority` |
+| `IX_Requests_AssignedTo_CreatedAt` | "התור של מטפל", מטפל + טווח תאריכים | Seek בשוויון על `AssignedTo`, ו-`CreatedAt` משמש גם כטווח וגם כמיון |
+| `IX_Requests_OrganizationName_CreatedAt` | סינון לפי ארגון מדויק | אותו עיקרון |
+| `IX_Requests_CreatedAt` | רשימה ללא סינון (ברירת המחדל), טווח תאריכים בלבד | Seek על טווח, ובסדר המיון |
+| `IX_Requests_UpdatedAt` | מיון לפי "עודכן לאחרונה" | מונע Sort על כל הטבלה |
+| `IX_RequestStatusHistory_RequestId_ChangedAt` | היסטוריית שינויים של פנייה | Seek לפי פנייה, כבר ממוין לפי זמן השינוי |
+
+**מדידה על 100,000 רשומות** (`SET STATISTICS IO`, logical reads, שאילתות עם פרמטרים כפי ש-EF שולח):
+
+| שאילתה | לפני האינדקסים החדשים (COUNT) | אחרי (COUNT / עמוד של 20) | Plan אחרי |
+|---|---|---|---|
+| לפי מטפל | 2,539 (Clustered Index Scan) | 34 / 196 | Index Seek |
+| לפי ארגון | 2,539 (Clustered Index Scan) | 8 / 157 | Index Seek |
+| טווח תאריכים | 40 | 40 / 154 | Index Seek (אינדקס קיים) |
+| סטטוס + מטפל + טווח | 2,539 (Clustered Index Scan) | 15 / 685 | Seek על שני אינדקסים |
+
+בכל שאילתות העמוד ה-Plan הוא `Top` מעל Index Seek שנקרא בסדר הפוך (`ORDERED BACKWARD`), כלומר בסדר המיון המבוקש. אין בו אופרטור Sort, והקריאה נעצרת אחרי 20 שורות.
+
+**מגבלות ידועות:**
+- **`search` לא יכול להשתמש באינדקס:** חיפוש חלקי מתורגם ל-`LIKE '%term%'`, שאינו sargable, ולכן נסרקים כל ה-`Title` וה-`OrganizationName`. ב-100,000 רשומות זה סביר. בהיקף גדול יותר החלופה היא Full-Text Search.
+- **שילוב סטטוס + מטפל:** `Status` אינו חלק מ-`IX_Requests_AssignedTo_CreatedAt`, ולכן הוא נבדק רק אחרי Key Lookup לכל שורה (685 קריאות בטבלה למעלה). אפשר להוסיף `INCLUDE (Status)`, במחיר עדכון אינדקס נוסף בכל שינוי סטטוס.
+- **אין מיון לפי `Title` / `OrganizationName`, בכוונה:** מיון על עמודות טקסט, במיוחד ב-offset עמוק, דורש Sort על כל הטבלה.
 
 ## בדיקות
 
