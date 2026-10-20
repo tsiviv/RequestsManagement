@@ -24,11 +24,12 @@ public static class StatusTransitionPolicy
     public static bool IsAllowed(RequestStatus from, RequestStatus to) =>
         GetAllowedNextStatuses(from).Contains(to);
 
-    public static void EnsureAllowed(RequestStatus from, RequestStatus to)
+    /// <summary>Returns why the transition is not allowed, or null when it is.</summary>
+    public static string? Validate(RequestStatus from, RequestStatus to)
     {
         if (from == to)
         {
-            throw new ValidationException($"Request is already in status '{to}'.");
+            return $"Request is already in status '{to}'.";
         }
 
         if (!IsAllowed(from, to))
@@ -37,7 +38,17 @@ public static class StatusTransitionPolicy
             var allowedText = allowed.Count == 0
                 ? $"'{from}' is a final status."
                 : $"Allowed: {string.Join(", ", allowed)}.";
-            throw new ValidationException($"Cannot change status from '{from}' to '{to}'. {allowedText}");
+            return $"Cannot change status from '{from}' to '{to}'. {allowedText}";
+        }
+
+        return null;
+    }
+
+    public static void EnsureAllowed(RequestStatus from, RequestStatus to)
+    {
+        if (Validate(from, to) is { } error)
+        {
+            throw new ValidationException(error);
         }
     }
 }

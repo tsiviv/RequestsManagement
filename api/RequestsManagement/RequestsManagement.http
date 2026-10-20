@@ -28,6 +28,19 @@ X-User-Name: %D7%93%D7%A0%D7%94%20%D7%9B%D7%94%D7%9F
   "rowVersion": "AAAAAAAAB9E="
 }
 
+### Bulk status update (partial success: 200 with a per-request outcome)
+POST {{RequestsManagement_HostAddress}}/api/requests/status/bulk
+Content-Type: application/json
+X-User-Name: %D7%93%D7%A0%D7%94%20%D7%9B%D7%94%D7%9F
+
+{
+  "status": "InProgress",
+  "items": [
+    { "id": 1, "rowVersion": "AAAAAAAAB9E=" },
+    { "id": 2, "rowVersion": "AAAAAAAAB9I=" }
+  ]
+}
+
 ### Status change history of a request, newest first (404 if the request does not exist)
 GET {{RequestsManagement_HostAddress}}/api/requests/1/history
 Accept: application/json

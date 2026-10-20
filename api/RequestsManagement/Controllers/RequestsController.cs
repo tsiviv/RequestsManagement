@@ -54,4 +54,19 @@ public class RequestsController(IRequestService requestService) : ControllerBase
         var result = await requestService.UpdateStatusAsync(id, dto, cancellationToken);
         return Ok(result);
     }
+
+    /// <summary>
+    /// Updates the status of up to 100 requests with partial success: returns 200 with a per-request
+    /// outcome (Updated / NotFound / Conflict / InvalidTransition); 400 only for request-level errors.
+    /// </summary>
+    [HttpPost("status/bulk")]
+    [ProducesResponseType(typeof(BulkUpdateStatusResultDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    public async Task<ActionResult<BulkUpdateStatusResultDto>> BulkUpdateStatus(
+        [FromBody] BulkUpdateStatusDto dto,
+        CancellationToken cancellationToken)
+    {
+        var result = await requestService.BulkUpdateStatusAsync(dto, cancellationToken);
+        return Ok(result);
+    }
 }

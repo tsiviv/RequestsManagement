@@ -12,4 +12,6 @@ public interface IRequestService
     Task<IReadOnlyList<RequestStatusHistoryDto>> GetHistoryAsync(int id, CancellationToken cancellationToken = default);
 
     Task<RequestDto> UpdateStatusAsync(int id, UpdateRequestStatusDto dto, CancellationToken cancellationToken = default);
+
+    Task<BulkUpdateStatusResultDto> BulkUpdateStatusAsync(BulkUpdateStatusDto dto, CancellationToken cancellationToken = default);
 }

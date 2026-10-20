@@ -5,8 +5,9 @@ namespace RequestsManagement.DTOs;
 
 public class UpdateRequestStatusDto
 {
-    [Required]
-    public RequestStatus Status { get; set; }
+    // Nullable so [Required] can tell "missing" apart from the enum default (New).
+    [Required(ErrorMessage = "Status is required.")]
+    public RequestStatus? Status { get; set; }
 
     // Base64-encoded RowVersion from the RequestDto previously fetched by the client.
     [Required]

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using RequestsManagement.Data;
 using RequestsManagement.DTOs;
 using RequestsManagement.DTOs.Common;
+using RequestsManagement.Enums;
 using RequestsManagement.Exceptions;
 using RequestsManagement.Mapping;
 using RequestsManagement.Models;
@@ -152,21 +153,8 @@ public class RequestService(AppDbContext db, ICurrentUser currentUser, ILogger<R
         // Resolved first: like the checks below, a missing/invalid acting user is bad input (400)
         // and must be rejected before touching the database.
         var changedBy = currentUser.UserName;
-
-        if (!Enum.IsDefined(dto.Status))
-        {
-            throw new ValidationException($"'{dto.Status}' is not a valid request status.");
-        }
-
-        byte[] rowVersion;
-        try
-        {
-            rowVersion = Convert.FromBase64String(dto.RowVersion);
-        }
-        catch (FormatException)
-        {
-            throw new ValidationException("RowVersion must be a valid base64-encoded value.");
-        }
+        var status = ValidateTargetStatus(dto.Status);
+        var rowVersion = ParseRowVersion(dto.RowVersion);
 
         var entity = await db.Requests.FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
         if (entity is null)
@@ -176,34 +164,128 @@ public class RequestService(AppDbContext db, ICurrentUser currentUser, ILogger<R
 
         // Early stale check: if the client's version is outdated, its view of the current status is
         // too, so report 409 (reload) rather than a misleading 400 for a transition it never saw.
-        // Not a substitute for the database check below, which still catches concurrent writers.
-        if (!entity.RowVersion.AsSpan().SequenceEqual(rowVersion))
+        // Not a substitute for the database check in TrySaveStatusChangeAsync, which still catches
+        // concurrent writers.
+        if (IsStale(entity, rowVersion))
         {
-            logger.LogWarning("Status update of request {RequestId} rejected: client RowVersion is stale", id);
-            throw new ConcurrencyConflictException(
-                $"Request {id} was modified by another user since it was loaded. Reload and try again.");
+            throw new ConcurrencyConflictException(ConflictMessage(id));
         }
 
-        StatusTransitionPolicy.EnsureAllowed(entity.Status, dto.Status);
+        StatusTransitionPolicy.EnsureAllowed(entity.Status, status);
 
+        if (!await TrySaveStatusChangeAsync(entity, rowVersion, status, changedBy, cancellationToken))
+        {
+            throw new ConcurrencyConflictException(ConflictMessage(id));
+        }
+
+        return entity.ToDto();
+    }
+
+    public async Task<BulkUpdateStatusResultDto> BulkUpdateStatusAsync(BulkUpdateStatusDto dto, CancellationToken cancellationToken = default)
+    {
+        // Request-level validation (400, nothing updated): problems with the request as a whole are
+        // client bugs, not the state of a particular request.
+        var changedBy = currentUser.UserName;
+        var status = ValidateTargetStatus(dto.Status);
+
+        if (dto.Items is not { Count: > 0 and <= BulkUpdateStatusDto.MaxItems })
+        {
+            throw new ValidationException($"Items must contain between 1 and {BulkUpdateStatusDto.MaxItems} requests.");
+        }
+
+        var duplicateIds = dto.Items.GroupBy(i => i.Id).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
+        if (duplicateIds.Count > 0)
+        {
+            throw new ValidationException($"Each request may appear only once. Duplicate ids: {string.Join(", ", duplicateIds)}.");
+        }
+
+        var rowVersions = dto.Items.ToDictionary(i => i.Id, i => ParseRowVersion(i.RowVersion, i.Id));
+
+        // One query for all requests instead of one per item.
+        var ids = rowVersions.Keys.ToList();
+        var entities = await db.Requests
+            .Where(r => ids.Contains(r.Id))
+            .ToDictionaryAsync(r => r.Id, cancellationToken);
+
+        // Partial success: each request is saved by its own SaveChanges (its own transaction, status
+        // + audit row together), so a conflict on one request cannot roll back the others.
+        var results = new List<BulkUpdateStatusItemResultDto>(dto.Items.Count);
+        foreach (var item in dto.Items)
+        {
+            results.Add(await UpdateBulkItemAsync(item.Id, entities.GetValueOrDefault(item.Id), rowVersions[item.Id], status, changedBy, cancellationToken));
+        }
+
+        var updated = results.Count(r => r.Outcome == BulkUpdateOutcome.Updated);
+        logger.LogInformation("Bulk status update to {Status}: {Updated} of {Requested} updated, {Failed} failed",
+            status, updated, results.Count, results.Count - updated);
+
+        return new BulkUpdateStatusResultDto
+        {
+            Requested = results.Count,
+            Updated = updated,
+            Failed = results.Count - updated,
+            Results = results
+        };
+    }
+
+    private async Task<BulkUpdateStatusItemResultDto> UpdateBulkItemAsync(
+        int id, RequestEntity? entity, byte[] rowVersion, RequestStatus status, string changedBy, CancellationToken cancellationToken)
+    {
+        if (entity is null)
+        {
+            return Failed(id, BulkUpdateOutcome.NotFound, $"Request with id {id} was not found.");
+        }
+
+        // Same order as the single update: a stale client gets "reload", not a transition error.
+        if (IsStale(entity, rowVersion))
+        {
+            return Failed(id, BulkUpdateOutcome.Conflict, ConflictMessage(id));
+        }
+
+        if (StatusTransitionPolicy.Validate(entity.Status, status) is { } transitionError)
+        {
+            return Failed(id, BulkUpdateOutcome.InvalidTransition, transitionError);
+        }
+
+        if (!await TrySaveStatusChangeAsync(entity, rowVersion, status, changedBy, cancellationToken))
+        {
+            return Failed(id, BulkUpdateOutcome.Conflict, ConflictMessage(id));
+        }
+
+        return new BulkUpdateStatusItemResultDto { Id = id, Outcome = BulkUpdateOutcome.Updated, Request = entity.ToDto() };
+
+        static BulkUpdateStatusItemResultDto Failed(int id, BulkUpdateOutcome outcome, string error) =>
+            new() { Id = id, Outcome = outcome, Error = error };
+    }
+
+    /// <summary>
+    /// Applies the status change and its audit row, and saves both in one SaveChanges (one
+    /// transaction) guarded by the client's RowVersion. Returns false if the database reports a
+    /// concurrent write; the rolled-back changes are then detached so a later SaveChanges on the
+    /// same context (the next bulk item) does not retry them.
+    /// </summary>
+    private async Task<bool> TrySaveStatusChangeAsync(
+        RequestEntity entity, byte[] rowVersion, RequestStatus status, string changedBy, CancellationToken cancellationToken)
+    {
         db.Entry(entity).Property(r => r.RowVersion).OriginalValue = rowVersion;
 
         var now = DateTime.UtcNow;
         var previousStatus = entity.Status;
 
-        // Audit row is saved by the same SaveChanges (one transaction) as the status change:
-        // if the RowVersion-guarded UPDATE fails, the INSERT is rolled back with it, so there is
-        // never history without a change or a change without history.
-        db.RequestStatusHistory.Add(new RequestStatusHistoryEntity
+        // Saved by the same SaveChanges as the status change: if the RowVersion-guarded UPDATE
+        // fails, the INSERT is rolled back with it, so there is never history without a change
+        // or a change without history.
+        var history = new RequestStatusHistoryEntity
         {
             RequestId = entity.Id,
             PreviousStatus = previousStatus,
-            NewStatus = dto.Status,
+            NewStatus = status,
             ChangedAt = now,
             ChangedBy = changedBy
-        });
+        };
+        db.RequestStatusHistory.Add(history);
 
-        entity.Status = dto.Status;
+        entity.Status = status;
         entity.UpdatedAt = now;
 
         try
@@ -214,17 +296,60 @@ public class RequestService(AppDbContext db, ICurrentUser currentUser, ILogger<R
         {
             // A writer committed between our load and our save; the RowVersion-guarded UPDATE
             // matched no row and the transaction (including the audit row) was rolled back.
-            logger.LogWarning("Status update of request {RequestId} lost a concurrent write race (detected by the database)", id);
-            throw new ConcurrencyConflictException(
-                $"Request {id} was modified by another user since it was loaded. Reload and try again.");
+            logger.LogWarning("Status update of request {RequestId} lost a concurrent write race (detected by the database)", entity.Id);
+            db.Entry(history).State = EntityState.Detached;
+            db.Entry(entity).State = EntityState.Detached;
+            return false;
         }
 
         // ChangedBy is deliberately not logged: it is personal data and already lives in the audit table.
         logger.LogInformation("Request {RequestId} status changed from {PreviousStatus} to {NewStatus}",
-            id, previousStatus, dto.Status);
-
-        return entity.ToDto();
+            entity.Id, previousStatus, status);
+        return true;
     }
+
+    private bool IsStale(RequestEntity entity, byte[] rowVersion)
+    {
+        if (entity.RowVersion.AsSpan().SequenceEqual(rowVersion))
+        {
+            return false;
+        }
+
+        logger.LogWarning("Status update of request {RequestId} rejected: client RowVersion is stale", entity.Id);
+        return true;
+    }
+
+    private static RequestStatus ValidateTargetStatus(RequestStatus? status)
+    {
+        if (status is null)
+        {
+            throw new ValidationException("Status is required.");
+        }
+
+        if (!Enum.IsDefined(status.Value))
+        {
+            throw new ValidationException($"'{status}' is not a valid request status.");
+        }
+
+        return status.Value;
+    }
+
+    private static byte[] ParseRowVersion(string rowVersion, int? requestId = null)
+    {
+        try
+        {
+            return Convert.FromBase64String(rowVersion);
+        }
+        catch (FormatException)
+        {
+            throw new ValidationException(requestId is null
+                ? "RowVersion must be a valid base64-encoded value."
+                : $"RowVersion of request {requestId} must be a valid base64-encoded value.");
+        }
+    }
+
+    private static string ConflictMessage(int id) =>
+        $"Request {id} was modified by another user since it was loaded. Reload and try again.";
 
     private static void ValidateSort(string sortBy, string sortDirection)
     {

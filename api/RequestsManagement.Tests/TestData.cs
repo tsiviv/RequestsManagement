@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using RequestsManagement.Data;
@@ -11,9 +12,10 @@ namespace RequestsManagement.Tests;
 
 internal static class TestData
 {
-    public static AppDbContext CreateContext(string dbName) =>
+    public static AppDbContext CreateContext(string dbName, params IInterceptor[] interceptors) =>
         new(new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase(dbName)
+            .AddInterceptors(interceptors)
             .Options);
 
     public const string TestUser = "test-user";
