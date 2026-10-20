@@ -5,6 +5,7 @@ using RequestsManagement.DTOs.Common;
 using RequestsManagement.Exceptions;
 using RequestsManagement.Mapping;
 using RequestsManagement.Models;
+using RequestsManagement.Policies;
 
 namespace RequestsManagement.Services;
 
@@ -147,6 +148,17 @@ public class RequestService(AppDbContext db) : IRequestService
         {
             throw new NotFoundException($"Request with id {id} was not found.");
         }
+
+        // Early stale check: if the client's version is outdated, its view of the current status is
+        // too, so report 409 (reload) rather than a misleading 400 for a transition it never saw.
+        // Not a substitute for the database check below, which still catches concurrent writers.
+        if (!entity.RowVersion.AsSpan().SequenceEqual(rowVersion))
+        {
+            throw new ConcurrencyConflictException(
+                $"Request {id} was modified by another user since it was loaded. Reload and try again.");
+        }
+
+        StatusTransitionPolicy.EnsureAllowed(entity.Status, dto.Status);
 
         db.Entry(entity).Property(r => r.RowVersion).OriginalValue = rowVersion;
 

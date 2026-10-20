@@ -1,36 +1,15 @@
 using Microsoft.EntityFrameworkCore;
-using RequestsManagement.Data;
 using RequestsManagement.DTOs;
 using RequestsManagement.Enums;
 using RequestsManagement.Exceptions;
-using RequestsManagement.Models;
 using RequestsManagement.Services;
 using Xunit;
+using static RequestsManagement.Tests.TestData;
 
 namespace RequestsManagement.Tests;
 
 public class RequestServiceTests
 {
-    private static AppDbContext CreateContext(string dbName) =>
-        new(new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(dbName)
-            .Options);
-
-    private static RequestEntity NewRequest(string title, string org, RequestStatus status, RequestPriority priority, DateTime createdAt, string assignedTo = "Handler") =>
-        new()
-        {
-            Title = title,
-            OrganizationName = org,
-            AssignedTo = assignedTo,
-            Status = status,
-            Priority = priority,
-            CreatedAt = createdAt,
-            UpdatedAt = createdAt,
-            // The InMemory provider does not auto-generate rowversion values the way
-            // SQL Server does, so tests that exercise concurrency set this explicitly.
-            RowVersion = BitConverter.GetBytes(1L)
-        };
-
     // --- Query behavior ---------------------------------------------------
 
     [Fact]
