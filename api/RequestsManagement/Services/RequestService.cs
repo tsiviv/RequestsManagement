@@ -3,6 +3,7 @@ using RequestsManagement.Data;
 using RequestsManagement.DTOs;
 using RequestsManagement.DTOs.Common;
 using RequestsManagement.Exceptions;
+using RequestsManagement.Mapping;
 using RequestsManagement.Models;
 
 namespace RequestsManagement.Services;
@@ -76,17 +77,7 @@ public class RequestService(AppDbContext db) : IRequestService
             items = await requests
                 .Skip((int)skip)
                 .Take(query.PageSize)
-                .Select(r => new RequestDto
-                {
-                    Id = r.Id,
-                    Title = r.Title,
-                    OrganizationName = r.OrganizationName,
-                    Status = r.Status,
-                    Priority = r.Priority,
-                    CreatedAt = r.CreatedAt,
-                    UpdatedAt = r.UpdatedAt,
-                    RowVersion = Convert.ToBase64String(r.RowVersion)
-                })
+                .Select(RequestMappings.ToDtoProjection)
                 .ToListAsync(cancellationToken);
         }
 
@@ -172,17 +163,7 @@ public class RequestService(AppDbContext db) : IRequestService
                 $"Request {id} was modified by another user since it was loaded. Reload and try again.");
         }
 
-        return new RequestDto
-        {
-            Id = entity.Id,
-            Title = entity.Title,
-            OrganizationName = entity.OrganizationName,
-            Status = entity.Status,
-            Priority = entity.Priority,
-            CreatedAt = entity.CreatedAt,
-            UpdatedAt = entity.UpdatedAt,
-            RowVersion = Convert.ToBase64String(entity.RowVersion)
-        };
+        return entity.ToDto();
     }
 
     private static void ValidateSort(string sortBy, string sortDirection)

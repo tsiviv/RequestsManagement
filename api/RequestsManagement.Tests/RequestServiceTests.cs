@@ -160,6 +160,7 @@ public class RequestServiceTests
 
         Assert.Equal(2, result.TotalCount);
         Assert.Equal(["Match-AtFrom", "Match-Inside"], result.Items.Select(i => i.Title));
+        Assert.All(result.Items, i => Assert.Equal("Dana", i.AssignedTo));
     }
 
     [Theory]
@@ -282,6 +283,9 @@ public class RequestServiceTests
             new UpdateRequestStatusDto { Status = RequestStatus.InProgress, RowVersion = rowVersion });
 
         Assert.Equal(RequestStatus.InProgress, result.Status);
+        Assert.Equal(requestId, result.Id);
+        Assert.Equal("A", result.Title);
+        Assert.Equal("Handler", result.AssignedTo);
     }
 
     [Fact]
