@@ -30,6 +30,16 @@ public class RequestsController(IRequestService requestService) : ControllerBase
         return Ok(result);
     }
 
+    /// <summary>Returns the status change history of a request, newest first.</summary>
+    [HttpGet("{id:int}/history")]
+    [ProducesResponseType(typeof(IReadOnlyList<RequestStatusHistoryDto>), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<ActionResult<IReadOnlyList<RequestStatusHistoryDto>>> GetHistory(int id, CancellationToken cancellationToken)
+    {
+        var result = await requestService.GetHistoryAsync(id, cancellationToken);
+        return Ok(result);
+    }
+
     /// <summary>Updates a request's status using optimistic concurrency via RowVersion.</summary>
     [HttpPatch("{id:int}/status")]
     [ProducesResponseType(typeof(RequestDto), StatusCodes.Status200OK)]

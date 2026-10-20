@@ -25,4 +25,13 @@ public static class RequestMappings
     private static readonly Func<RequestEntity, RequestDto> ToDtoCompiled = ToDtoProjection.Compile();
 
     public static RequestDto ToDto(this RequestEntity entity) => ToDtoCompiled(entity);
+
+    public static readonly Expression<Func<RequestStatusHistoryEntity, RequestStatusHistoryDto>> ToHistoryDtoProjection = h => new RequestStatusHistoryDto
+    {
+        Id = h.Id,
+        PreviousStatus = h.PreviousStatus,
+        NewStatus = h.NewStatus,
+        ChangedAt = h.ChangedAt,
+        ChangedBy = h.ChangedBy
+    };
 }

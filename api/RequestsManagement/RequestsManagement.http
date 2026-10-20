@@ -28,6 +28,10 @@ X-User-Name: %D7%93%D7%A0%D7%94%20%D7%9B%D7%94%D7%9F
   "rowVersion": "AAAAAAAAB9E="
 }
 
+### Status change history of a request, newest first (404 if the request does not exist)
+GET {{RequestsManagement_HostAddress}}/api/requests/1/history
+Accept: application/json
+
 ### Aggregations
 GET {{RequestsManagement_HostAddress}}/api/requests/summary
 Accept: application/json

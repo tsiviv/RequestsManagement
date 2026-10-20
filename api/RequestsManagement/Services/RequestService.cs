@@ -126,6 +126,27 @@ public class RequestService(AppDbContext db, ICurrentUser currentUser) : IReques
         return result;
     }
 
+    public async Task<IReadOnlyList<RequestStatusHistoryDto>> GetHistoryAsync(int id, CancellationToken cancellationToken = default)
+    {
+        // Seeks IX_RequestStatusHistory_RequestId_ChangedAt, read backward for newest first
+        // (Id breaks ties between changes with the same timestamp).
+        var history = await db.RequestStatusHistory.AsNoTracking()
+            .Where(h => h.RequestId == id)
+            .OrderByDescending(h => h.ChangedAt)
+            .ThenByDescending(h => h.Id)
+            .Select(RequestMappings.ToHistoryDtoProjection)
+            .ToListAsync(cancellationToken);
+
+        // Only an empty result needs the existence check that separates "no changes yet" (200 [])
+        // from "no such request" (404), so the common case costs a single query.
+        if (history.Count == 0 && !await db.Requests.AnyAsync(r => r.Id == id, cancellationToken))
+        {
+            throw new NotFoundException($"Request with id {id} was not found.");
+        }
+
+        return history;
+    }
+
     public async Task<RequestDto> UpdateStatusAsync(int id, UpdateRequestStatusDto dto, CancellationToken cancellationToken = default)
     {
         // Resolved first: like the checks below, a missing/invalid acting user is bad input (400)
