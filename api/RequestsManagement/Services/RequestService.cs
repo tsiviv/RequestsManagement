@@ -166,8 +166,22 @@ public class RequestService(AppDbContext db, ICurrentUser currentUser) : IReques
 
         db.Entry(entity).Property(r => r.RowVersion).OriginalValue = rowVersion;
 
+        var now = DateTime.UtcNow;
+
+        // Audit row is saved by the same SaveChanges (one transaction) as the status change:
+        // if the RowVersion-guarded UPDATE fails, the INSERT is rolled back with it, so there is
+        // never history without a change or a change without history.
+        db.RequestStatusHistory.Add(new RequestStatusHistoryEntity
+        {
+            RequestId = entity.Id,
+            PreviousStatus = entity.Status,
+            NewStatus = dto.Status,
+            ChangedAt = now,
+            ChangedBy = changedBy
+        });
+
         entity.Status = dto.Status;
-        entity.UpdatedAt = DateTime.UtcNow;
+        entity.UpdatedAt = now;
 
         try
         {
