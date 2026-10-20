@@ -10,7 +10,11 @@ using RequestsManagement.Policies;
 
 namespace RequestsManagement.Services;
 
-public class RequestService(AppDbContext db, ICurrentUser currentUser, ILogger<RequestService> logger) : IRequestService
+public class RequestService(
+    AppDbContext db,
+    ICurrentUser currentUser,
+    IRequestSummaryCache summaryCache,
+    ILogger<RequestService> logger) : IRequestService
 {
     private static readonly string[] SortableFields =
         ["status", "priority", "createdat", "updatedat"];
@@ -92,7 +96,10 @@ public class RequestService(AppDbContext db, ICurrentUser currentUser, ILogger<R
         };
     }
 
-    public async Task<RequestSummaryDto> GetSummaryAsync(CancellationToken cancellationToken = default)
+    public Task<RequestSummaryDto> GetSummaryAsync(CancellationToken cancellationToken = default) =>
+        summaryCache.GetOrCreateAsync(ComputeSummaryAsync, cancellationToken);
+
+    private async Task<RequestSummaryDto> ComputeSummaryAsync(CancellationToken cancellationToken)
     {
         var total = await db.Requests.AsNoTracking().CountAsync(cancellationToken);
 

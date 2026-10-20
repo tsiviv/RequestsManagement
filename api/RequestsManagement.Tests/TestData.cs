@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -20,8 +21,20 @@ internal static class TestData
 
     public const string TestUser = "test-user";
 
-    public static RequestService CreateService(AppDbContext context, ICurrentUser? currentUser = null, ILogger<RequestService>? logger = null) =>
-        new(context, currentUser ?? new StubCurrentUser(TestUser), logger ?? NullLogger<RequestService>.Instance);
+    // A fresh cache per service by default, so tests never see each other's cached summary;
+    // cache tests pass a shared one to exercise hits across "requests".
+    public static RequestService CreateService(
+        AppDbContext context,
+        ICurrentUser? currentUser = null,
+        ILogger<RequestService>? logger = null,
+        IRequestSummaryCache? summaryCache = null) =>
+        new(context,
+            currentUser ?? new StubCurrentUser(TestUser),
+            summaryCache ?? CreateSummaryCache(),
+            logger ?? NullLogger<RequestService>.Instance);
+
+    public static MemoryRequestSummaryCache CreateSummaryCache(IMemoryCache? memoryCache = null) =>
+        new(memoryCache ?? new MemoryCache(new MemoryCacheOptions()), NullLogger<MemoryRequestSummaryCache>.Instance);
 
     // Records log entries (level, rendered message, structured values) so tests can assert on them.
     public sealed class ListLogger<T> : ILogger<T>
