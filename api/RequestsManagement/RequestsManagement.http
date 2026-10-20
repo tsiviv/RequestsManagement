@@ -1,6 +1,23 @@
 @RequestsManagement_HostAddress = http://localhost:5088
 
-GET {{RequestsManagement_HostAddress}}/weatherforecast/
+### Default listing: newest first, page 1
+GET {{RequestsManagement_HostAddress}}/api/requests
+Accept: application/json
+
+### Combined filters: handler + organization + July 2026 (half-open: createdTo is exclusive)
+GET {{RequestsManagement_HostAddress}}/api/requests?assignedTo=דנה כהן&organizationName=רכבת ישראל - סניף חיפה&createdFrom=2026-07-01&createdTo=2026-08-01&status=Completed&sortBy=updatedAt&sortDirection=desc&page=1&pageSize=20
+Accept: application/json
+
+### Free-text search on Title / OrganizationName
+GET {{RequestsManagement_HostAddress}}/api/requests?search=חשבונית&priority=High
+Accept: application/json
+
+### Validation error (400): createdFrom must be earlier than createdTo
+GET {{RequestsManagement_HostAddress}}/api/requests?createdFrom=2026-08-01&createdTo=2026-07-01
+Accept: application/json
+
+### Aggregations
+GET {{RequestsManagement_HostAddress}}/api/requests/summary
 Accept: application/json
 
 ###

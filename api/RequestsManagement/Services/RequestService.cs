@@ -15,6 +15,7 @@ public class RequestService(AppDbContext db) : IRequestService
     public async Task<PagedResultDto<RequestDto>> GetRequestsAsync(RequestQueryDto query, CancellationToken cancellationToken = default)
     {
         ValidateSort(query.SortBy, query.SortDirection);
+        ValidateDateRange(query.CreatedFrom, query.CreatedTo);
 
         IQueryable<RequestEntity> requests = db.Requests.AsNoTracking();
 
@@ -32,6 +33,28 @@ public class RequestService(AppDbContext db) : IRequestService
         if (query.Priority.HasValue)
         {
             requests = requests.Where(r => r.Priority == query.Priority.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.OrganizationName))
+        {
+            var organizationName = query.OrganizationName.Trim();
+            requests = requests.Where(r => r.OrganizationName == organizationName);
+        }
+
+        if (!string.IsNullOrWhiteSpace(query.AssignedTo))
+        {
+            var assignedTo = query.AssignedTo.Trim();
+            requests = requests.Where(r => r.AssignedTo == assignedTo);
+        }
+
+        if (query.CreatedFrom.HasValue)
+        {
+            requests = requests.Where(r => r.CreatedAt >= query.CreatedFrom.Value);
+        }
+
+        if (query.CreatedTo.HasValue)
+        {
+            requests = requests.Where(r => r.CreatedAt < query.CreatedTo.Value);
         }
 
         var totalCount = await requests.CountAsync(cancellationToken);
@@ -177,16 +200,29 @@ public class RequestService(AppDbContext db) : IRequestService
         }
     }
 
+    private static void ValidateDateRange(DateTime? createdFrom, DateTime? createdTo)
+    {
+        if (createdFrom.HasValue && createdTo.HasValue && createdFrom.Value >= createdTo.Value)
+        {
+            throw new ValidationException("CreatedFrom must be earlier than CreatedTo.");
+        }
+    }
+
     private static IQueryable<RequestEntity> ApplySort(IQueryable<RequestEntity> query, string sortBy, string sortDirection)
     {
         var descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
 
-        return sortBy.Trim().ToLowerInvariant() switch
+        var ordered = sortBy.Trim().ToLowerInvariant() switch
         {
             "status" => descending ? query.OrderByDescending(r => r.Status) : query.OrderBy(r => r.Status),
             "priority" => descending ? query.OrderByDescending(r => r.Priority) : query.OrderBy(r => r.Priority),
             "updatedat" => descending ? query.OrderByDescending(r => r.UpdatedAt) : query.OrderBy(r => r.UpdatedAt),
             _ => descending ? query.OrderByDescending(r => r.CreatedAt) : query.OrderBy(r => r.CreatedAt)
         };
+
+        // Id tiebreaker makes the order total, so OFFSET paging is deterministic: without it, rows
+        // sharing a sort value (e.g. ~55K with Status = Completed) may repeat or vanish across pages.
+        // Free in SQL Server, since every non-clustered index key already ends with the clustered Id.
+        return descending ? ordered.ThenByDescending(r => r.Id) : ordered.ThenBy(r => r.Id);
     }
 }

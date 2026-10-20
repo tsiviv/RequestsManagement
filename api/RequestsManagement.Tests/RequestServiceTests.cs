@@ -16,12 +16,12 @@ public class RequestServiceTests
             .UseInMemoryDatabase(dbName)
             .Options);
 
-    private static RequestEntity NewRequest(string title, string org, RequestStatus status, RequestPriority priority, DateTime createdAt) =>
+    private static RequestEntity NewRequest(string title, string org, RequestStatus status, RequestPriority priority, DateTime createdAt, string assignedTo = "Handler") =>
         new()
         {
             Title = title,
             OrganizationName = org,
-            AssignedTo = "Handler",
+            AssignedTo = assignedTo,
             Status = status,
             Priority = priority,
             CreatedAt = createdAt,
@@ -123,6 +123,93 @@ public class RequestServiceTests
         Assert.Equal(1, result.TotalCount);
         Assert.Equal(int.MaxValue, result.Page);
         Assert.Equal(100, result.PageSize);
+    }
+
+    [Fact]
+    public async Task GetRequestsAsync_CombinesOrganizationAssigneeAndHalfOpenDateRange()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var from = new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc);
+        var to = new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        await using (var seedContext = CreateContext(dbName))
+        {
+            seedContext.Requests.AddRange(
+                NewRequest("Match-AtFrom", "Org1", RequestStatus.New, RequestPriority.Low, from, "Dana"),
+                NewRequest("Match-Inside", "Org1", RequestStatus.New, RequestPriority.Low, from.AddDays(10), "Dana"),
+                NewRequest("AtTo-Excluded", "Org1", RequestStatus.New, RequestPriority.Low, to, "Dana"),
+                NewRequest("BeforeFrom", "Org1", RequestStatus.New, RequestPriority.Low, from.AddTicks(-1), "Dana"),
+                NewRequest("OtherAssignee", "Org1", RequestStatus.New, RequestPriority.Low, from.AddDays(5), "Yossi"),
+                // Exact organization match: a name that merely contains "Org1" must not match.
+                NewRequest("OtherOrg", "Org10", RequestStatus.New, RequestPriority.Low, from.AddDays(5), "Dana"));
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var context = CreateContext(dbName);
+        var service = new RequestService(context);
+
+        var result = await service.GetRequestsAsync(new RequestQueryDto
+        {
+            OrganizationName = " Org1 ",
+            AssignedTo = "Dana",
+            CreatedFrom = from,
+            CreatedTo = to,
+            SortBy = "createdAt",
+            SortDirection = "asc"
+        });
+
+        Assert.Equal(2, result.TotalCount);
+        Assert.Equal(["Match-AtFrom", "Match-Inside"], result.Items.Select(i => i.Title));
+    }
+
+    [Theory]
+    [InlineData(0)]   // from == to: the half-open range would be empty
+    [InlineData(-1)]  // from after to
+    public async Task GetRequestsAsync_WithCreatedFromNotBeforeCreatedTo_ThrowsValidationException(int daysFromToFrom)
+    {
+        await using var context = CreateContext(Guid.NewGuid().ToString());
+        var service = new RequestService(context);
+        var from = new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc);
+
+        await Assert.ThrowsAsync<ValidationException>(() =>
+            service.GetRequestsAsync(new RequestQueryDto { CreatedFrom = from, CreatedTo = from.AddDays(daysFromToFrom) }));
+    }
+
+    [Fact]
+    public async Task GetRequestsAsync_SortingByNonUniqueField_PagesDeterministicallyById()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var now = DateTime.UtcNow;
+
+        await using (var seedContext = CreateContext(dbName))
+        {
+            // All rows share the same Status, so only the Id tiebreaker defines their order.
+            for (var i = 0; i < 6; i++)
+            {
+                seedContext.Requests.Add(NewRequest($"Req{i}", "Org", RequestStatus.Waiting, RequestPriority.Low, now));
+            }
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var context = CreateContext(dbName);
+        var service = new RequestService(context);
+
+        var pages = new List<int>();
+        for (var page = 1; page <= 3; page++)
+        {
+            var result = await service.GetRequestsAsync(new RequestQueryDto
+            {
+                Page = page,
+                PageSize = 2,
+                SortBy = "status",
+                SortDirection = "desc"
+            });
+            pages.AddRange(result.Items.Select(i => i.Id));
+        }
+
+        // Every row appears exactly once across pages, in descending Id order.
+        Assert.Equal(6, pages.Distinct().Count());
+        Assert.Equal(pages.OrderByDescending(id => id), pages);
     }
 
     [Fact]
