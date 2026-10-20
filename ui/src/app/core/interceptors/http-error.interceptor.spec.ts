@@ -64,13 +64,13 @@ describe('httpErrorInterceptor', () => {
     http.patch('/api/requests/1/status', {}).subscribe({ error: (err: ApiError) => (captured = err) });
 
     httpMock.expectOne('/api/requests/1/status').flush(
-      { status: 400, title: 'Validation failed', detail: "Cannot change status from 'New' to 'Completed'. Allowed: InProgress." },
+      { status: 400, title: 'הקלט אינו תקין', detail: "לא ניתן לשנות סטטוס מ'חדש' ל'הושלם'. מעברים מותרים: בטיפול." },
       { status: 400, statusText: 'Bad Request' },
     );
 
     expect(captured?.kind).toBe('validation');
     expect(captured?.message).toBe('אנא בדוק את הערכים שהוזנו.');
-    expect(captured?.detail).toBe("Cannot change status from 'New' to 'Completed'. Allowed: InProgress.");
+    expect(captured?.detail).toBe("לא ניתן לשנות סטטוס מ'חדש' ל'הושלם'. מעברים מותרים: בטיפול.");
   });
 
   it('uses the first field error of a model-validation ProblemDetails', () => {
@@ -78,11 +78,11 @@ describe('httpErrorInterceptor', () => {
     http.post('/api/requests/status/bulk', {}).subscribe({ error: (err: ApiError) => (captured = err) });
 
     httpMock.expectOne('/api/requests/status/bulk').flush(
-      { status: 400, errors: { Items: ['Items must contain at most 100 requests.'] } },
+      { status: 400, errors: { Items: ['ניתן לעדכן עד 100 פניות בבקשה אחת.'] } },
       { status: 400, statusText: 'Bad Request' },
     );
 
-    expect(captured?.detail).toBe('Items must contain at most 100 requests.');
+    expect(captured?.detail).toBe('ניתן לעדכן עד 100 פניות בבקשה אחת.');
   });
 
   it('has no detail when the error body is not ProblemDetails', () => {

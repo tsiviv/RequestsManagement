@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using RequestsManagement.Exceptions;
+using RequestsManagement.Extensions;
 
 namespace RequestsManagement.Middleware;
 
@@ -30,14 +31,23 @@ public class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Exception
         }
     }
 
+    private static string WithoutControlCharacters(string value) =>
+        string.Create(value.Length, value, (span, source) =>
+        {
+            for (var i = 0; i < source.Length; i++)
+            {
+                span[i] = char.IsControl(source[i]) ? ' ' : source[i];
+            }
+        });
+
     private async Task HandleAsync(HttpContext context, Exception ex)
     {
         var (statusCode, title) = ex switch
         {
-            NotFoundException => (StatusCodes.Status404NotFound, "Resource not found"),
-            ConcurrencyConflictException => (StatusCodes.Status409Conflict, "Concurrency conflict"),
-            ValidationException => (StatusCodes.Status400BadRequest, "Validation failed"),
-            _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred")
+            NotFoundException => (StatusCodes.Status404NotFound, "המשאב לא נמצא"),
+            ConcurrencyConflictException => (StatusCodes.Status409Conflict, "התנגשות בעדכון"),
+            ValidationException => (StatusCodes.Status400BadRequest, ValidationMessagesExtensions.InvalidInputTitle),
+            _ => (StatusCodes.Status500InternalServerError, "שגיאה בלתי צפויה")
         };
 
         if (statusCode == StatusCodes.Status500InternalServerError)
@@ -46,10 +56,11 @@ public class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Exception
         }
         else
         {
-            // Client errors are expected traffic, not warnings. Messages are the app's own
-            // exception texts (ids, enum names), never request bodies or header values.
+            // Client errors are expected traffic, not warnings. Messages are the app's own exception
+            // texts, never request bodies or header values, but some echo a query value (e.g. an
+            // invalid sortBy), so control characters are replaced to prevent forged log lines.
             logger.LogInformation("{Method} {Path} -> {StatusCode} {Title}: {Message}",
-                context.Request.Method, context.Request.Path, statusCode, title, ex.Message);
+                context.Request.Method, context.Request.Path, statusCode, title, WithoutControlCharacters(ex.Message));
         }
 
         var problemDetails = new ProblemDetails
@@ -58,7 +69,7 @@ public class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Exception
             Title = title,
             // Never leak internal exception details for 500s; app exceptions carry a safe message.
             Detail = statusCode == StatusCodes.Status500InternalServerError
-                ? "An unexpected error occurred. Please try again later."
+                ? "אירעה שגיאה בלתי צפויה. נסו שוב מאוחר יותר."
                 : ex.Message,
             Instance = context.Request.Path
         };

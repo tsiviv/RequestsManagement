@@ -31,16 +31,16 @@ public static class StatusTransitionPolicy
     {
         if (from == to)
         {
-            return $"Request is already in status '{to}'.";
+            return $"הפנייה כבר בסטטוס '{to.DisplayName()}'.";
         }
 
         if (!IsAllowed(from, to))
         {
             var allowed = GetAllowedNextStatuses(from);
             var allowedText = allowed.Count == 0
-                ? $"'{from}' is a final status."
-                : $"Allowed: {string.Join(", ", allowed)}.";
-            return $"Cannot change status from '{from}' to '{to}'. {allowedText}";
+                ? $"'{from.DisplayName()}' הוא סטטוס סופי."
+                : $"מעברים מותרים: {string.Join(", ", allowed.Select(s => s.DisplayName()))}.";
+            return $"לא ניתן לשנות סטטוס מ'{from.DisplayName()}' ל'{to.DisplayName()}'. {allowedText}";
         }
 
         return null;

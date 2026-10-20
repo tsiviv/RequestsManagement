@@ -26,13 +26,13 @@ public sealed class HeaderCurrentUser(IHttpContextAccessor httpContextAccessor) 
 
         if (values.Count > 1)
         {
-            throw new ValidationException($"The {HeaderName} header must be specified once.");
+            throw new ValidationException($"יש לשלוח את הכותרת {HeaderName} פעם אחת בלבד.");
         }
 
         var raw = values.ToString();
         if (string.IsNullOrWhiteSpace(raw))
         {
-            throw new ValidationException($"The {HeaderName} header is required for changes.");
+            throw new ValidationException($"חסר שם משתמש: הכותרת {HeaderName} נדרשת לכל שינוי, כי השם נרשם בהיסטוריית השינויים.");
         }
 
         var userName = Uri.UnescapeDataString(raw).Trim();
@@ -41,8 +41,8 @@ public sealed class HeaderCurrentUser(IHttpContextAccessor httpContextAccessor) 
             userName.Any(char.IsControl))
         {
             throw new ValidationException(
-                $"The {HeaderName} header must be 1-{RequestStatusHistoryEntity.ChangedByMaxLength} characters " +
-                "(percent-encoded UTF-8) without control characters.");
+                $"שם המשתמש בכותרת {HeaderName} חייב להכיל 1 עד {RequestStatusHistoryEntity.ChangedByMaxLength} תווים " +
+                "(UTF-8 בקידוד percent-encoding), ללא תווי בקרה.");
         }
 
         return userName;

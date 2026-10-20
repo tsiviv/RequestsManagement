@@ -70,12 +70,12 @@
 
     <ng-container matColumnDef="createdAt">
       <th mat-header-cell *matHeaderCellDef mat-sort-header scope="col">נוצר</th>
-      <td mat-cell *matCellDef="let row">{{ row.createdAt | date: 'MMM d, y, h:mm a' }}</td>
+      <td mat-cell *matCellDef="let row">{{ row.createdAt | date: 'd MMM y, HH:mm' }}</td>
     </ng-container>
 
     <ng-container matColumnDef="updatedAt">
       <th mat-header-cell *matHeaderCellDef mat-sort-header scope="col">עודכן</th>
-      <td mat-cell *matCellDef="let row">{{ row.updatedAt | date: 'MMM d, y, h:mm a' }}</td>
+      <td mat-cell *matCellDef="let row">{{ row.updatedAt | date: 'd MMM y, HH:mm' }}</td>
     </ng-container>
 
     <ng-container matColumnDef="actions">

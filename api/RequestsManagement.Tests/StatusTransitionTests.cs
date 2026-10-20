@@ -78,7 +78,7 @@ public class StatusTransitionTests
     {
         var ex = Assert.Throws<ValidationException>(() =>
             StatusTransitionPolicy.EnsureAllowed(RequestStatus.Waiting, RequestStatus.Waiting));
-        Assert.Contains("already in status 'Waiting'", ex.Message);
+        Assert.Contains("כבר בסטטוס 'ממתין'", ex.Message);
     }
 
     [Fact]
@@ -86,7 +86,7 @@ public class StatusTransitionTests
     {
         var ex = Assert.Throws<ValidationException>(() =>
             StatusTransitionPolicy.EnsureAllowed(RequestStatus.Completed, RequestStatus.InProgress));
-        Assert.Contains("final status", ex.Message);
+        Assert.Contains("סטטוס סופי", ex.Message);
     }
 
     // --- Service: the API path uses the same policy -------------------------

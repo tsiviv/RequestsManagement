@@ -31,8 +31,8 @@ public class BulkUpdateContractTests
     }
 
     [Theory]
-    [InlineData(0, "at least 1")]
-    [InlineData(BulkUpdateStatusDto.MaxItems + 1, "at most 100")]
+    [InlineData(0, "פנייה אחת לפחות")]
+    [InlineData(BulkUpdateStatusDto.MaxItems + 1, "עד 100 פניות")]
     public void ItemCountOutsideLimits_IsRejected(int count, string expectedMessage)
     {
         Assert.Contains(Validate(WithItems(count)), m => m.Contains(expectedMessage));
@@ -41,19 +41,19 @@ public class BulkUpdateContractTests
     [Fact]
     public void MissingStatus_IsRejected_RatherThanDefaultingToNew()
     {
-        Assert.Contains("Status is required.", Validate(WithItems(1, status: null)));
+        Assert.Contains("יש לציין סטטוס.", Validate(WithItems(1, status: null)));
     }
 
     [Fact]
     public void MissingItems_IsRejected()
     {
-        Assert.Contains("Items is required.", Validate(new BulkUpdateStatusDto { Status = RequestStatus.InProgress, Items = null! }));
+        Assert.Contains("יש לשלוח רשימת פניות.", Validate(new BulkUpdateStatusDto { Status = RequestStatus.InProgress, Items = null! }));
     }
 
     [Theory]
-    [InlineData(0, "AAAAAAAAB9E=", "Id must be a positive integer.")]
-    [InlineData(-5, "AAAAAAAAB9E=", "Id must be a positive integer.")]
-    [InlineData(1, "", "RowVersion is required.")]
+    [InlineData(0, "AAAAAAAAB9E=", "מזהה הפנייה חייב להיות מספר חיובי.")]
+    [InlineData(-5, "AAAAAAAAB9E=", "מזהה הפנייה חייב להיות מספר חיובי.")]
+    [InlineData(1, "", "יש לציין RowVersion.")]
     public void InvalidItem_IsRejected(int id, string rowVersion, string expectedMessage)
     {
         Assert.Contains(expectedMessage, Validate(new BulkUpdateStatusItemDto { Id = id, RowVersion = rowVersion }));

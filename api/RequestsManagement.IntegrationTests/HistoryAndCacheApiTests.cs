@@ -33,6 +33,7 @@ public sealed class HistoryAndCacheApiTests(SqlServerApiFixture fixture) : IAsyn
 
         var history = await fixture.CreateClient().GetFromJsonAsync<List<RequestStatusHistoryDto>>(
             $"/api/requests/{request.Id}/history", Json);
+        Assert.NotNull(history);
 
         Assert.Equal(
             [
@@ -40,7 +41,7 @@ public sealed class HistoryAndCacheApiTests(SqlServerApiFixture fixture) : IAsyn
                 (RequestStatus.InProgress, RequestStatus.Waiting, "יוסי לוי"),
                 (RequestStatus.New, RequestStatus.InProgress, "דנה כהן")
             ],
-            history!.Select(h => (h.PreviousStatus, h.NewStatus, h.ChangedBy)));
+            history.Select(h => (h.PreviousStatus, h.NewStatus, h.ChangedBy)));
         Assert.True(history[0].ChangedAt >= history[1].ChangedAt && history[1].ChangedAt >= history[2].ChangedAt);
 
         // ChangedAt is the same instant as the request's UpdatedAt for the latest change.

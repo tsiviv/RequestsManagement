@@ -105,6 +105,42 @@ public sealed class RequestsQueryApiTests(SqlServerApiFixture fixture) : IAsyncL
         Assert.Equal(3, page.Items.Count);
     }
 
+    [Theory]
+    [InlineData("/api/requests?sortBy=")]
+    [InlineData("/api/requests?sortDirection=")]
+    [InlineData("/api/requests?sortBy=&sortDirection=")]
+    [InlineData("/api/requests?sortBy=%20%20")]
+    public async Task EmptySortParameters_FallBackToTheDefaultOrder(string url)
+    {
+        // An empty query value binds as null (ConvertEmptyStringToNull), not as the DTO default, so
+        // "?sortBy=" from a client that clears a field must still mean "default sort", never a 500.
+        var day = new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc);
+        await fixture.SeedAsync(Request("older", createdAt: day), Request("newer", createdAt: day.AddDays(1)));
+
+        var response = await fixture.CreateClient().GetAsync(url);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var page = await response.Content.ReadFromJsonAsync<PagedResultDto<RequestDto>>(Json);
+        Assert.Equal(["newer", "older"], page!.Items.Select(i => i.Title)); // createdAt desc
+    }
+
+    [Fact]
+    public async Task Swagger_DocumentsTheUserHeader_OnChangingOperationsOnly()
+    {
+        // Reviewers try the API from Swagger UI; without the header documented, every update is a 400.
+        var json = await fixture.CreateClient().GetStringAsync("/swagger/v1/swagger.json");
+        using var doc = System.Text.Json.JsonDocument.Parse(json);
+        var paths = doc.RootElement.GetProperty("paths");
+
+        bool HasUserHeader(string path, string method) =>
+            paths.GetProperty(path).GetProperty(method).TryGetProperty("parameters", out var ps) &&
+            ps.EnumerateArray().Any(p => p.GetProperty("name").GetString() == "X-User-Name" && p.GetProperty("in").GetString() == "header");
+
+        Assert.True(HasUserHeader("/api/requests/{id}/status", "patch"));
+        Assert.True(HasUserHeader("/api/requests/status/bulk", "post"));
+        Assert.False(HasUserHeader("/api/requests", "get"));
+    }
+
     [Fact]
     public async Task FilterOptions_ListDistinctOrganizationsAndHandlers()
     {

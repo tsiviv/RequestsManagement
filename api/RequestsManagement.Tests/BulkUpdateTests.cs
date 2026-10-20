@@ -50,7 +50,7 @@ public class BulkUpdateTests
             Assert.Null(r.Request);
             Assert.False(string.IsNullOrEmpty(r.Error));
         });
-        Assert.Contains("final status", result.Results[0].Error);
+        Assert.Contains("סטטוס סופי", result.Results[0].Error);
 
         await using var verify = CreateContext(dbName);
         var statuses = await verify.Requests.ToDictionaryAsync(r => r.Id, r => r.Status);
@@ -97,7 +97,7 @@ public class BulkUpdateTests
 
         var item = Assert.Single(result.Results);
         Assert.Equal(BulkUpdateOutcome.InvalidTransition, item.Outcome);
-        Assert.Contains("already in status 'Waiting'", item.Error);
+        Assert.Contains("כבר בסטטוס 'ממתין'", item.Error);
     }
 
     [Fact]
@@ -177,7 +177,7 @@ public class BulkUpdateTests
         await using var context = CreateContext(dbName);
         var ex = await Assert.ThrowsAsync<ValidationException>(() => CreateService(context)
             .UpdateStatusAsync(seeded[0].Id, new UpdateRequestStatusDto { Status = null, RowVersion = seeded[0].RowVersion }));
-        Assert.Equal("Status is required.", ex.Message);
+        Assert.Equal("יש לציין סטטוס.", ex.Message);
     }
 
     // --- Helpers -----------------------------------------------------------------

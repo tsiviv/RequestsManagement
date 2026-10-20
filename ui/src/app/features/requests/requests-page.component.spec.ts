@@ -538,7 +538,7 @@ describe('RequestsPageComponent', () => {
       updated: 1,
       failed: 1,
       results: [
-        { id: 1, outcome: 'InvalidTransition', error: "Cannot change status from 'New' to 'Completed'.", request: null },
+        { id: 1, outcome: 'InvalidTransition', error: "לא ניתן לשנות סטטוס מ'חדש' ל'הושלם'. מעברים מותרים: בטיפול.", request: null },
         { id: 2, outcome: 'Updated', error: null, request: updatedSecond },
       ],
     });
@@ -617,14 +617,14 @@ describe('RequestsPageComponent', () => {
 
     getBulkBar()!.apply.emit('Completed');
     httpMock.expectOne(`${baseUrl}/status/bulk`).flush(
-      { status: 400, errors: { Items: ['Items must contain at most 100 requests.'] } },
+      { status: 400, errors: { Items: ['ניתן לעדכן עד 100 פניות בבקשה אחת.'] } },
       { status: 400, statusText: 'Bad Request' },
     );
 
     expect(component.bulkPending()).toBe(false);
     expect(component.pagedResult()?.items).toEqual(SAMPLE_ITEMS);
     expect(component.selectedIds().size).toBe(2);
-    expect(snackBarOpen).toHaveBeenCalledWith(expect.stringContaining('Items must contain at most 100'), 'סגור', expect.anything());
+    expect(snackBarOpen).toHaveBeenCalledWith(expect.stringContaining('ניתן לעדכן עד 100 פניות'), 'סגור', expect.anything());
   });
 
   it('explains a rejected update (400) with the server reason and reloads the stale row', async () => {
@@ -634,14 +634,14 @@ describe('RequestsPageComponent', () => {
     const row = SAMPLE_ITEMS[0];
     getTable().statusChange.emit({ row, status: 'InProgress' });
     httpMock.expectOne(`${baseUrl}/${row.id}/status`).flush(
-      { status: 400, detail: "Cannot change status from 'Completed' to 'InProgress'. 'Completed' is a final status." },
+      { status: 400, detail: "לא ניתן לשנות סטטוס מ'הושלם' ל'בטיפול'. 'הושלם' הוא סטטוס סופי." },
       { status: 400, statusText: 'Bad Request' },
     );
     fixture.detectChanges();
     await fixture.whenStable();
 
     expect(snackBarOpen).toHaveBeenCalledWith(
-      "לא ניתן לעדכן את הסטטוס: Cannot change status from 'Completed' to 'InProgress'. 'Completed' is a final status.",
+      "לא ניתן לעדכן את הסטטוס: לא ניתן לשנות סטטוס מ'הושלם' ל'בטיפול'. 'הושלם' הוא סטטוס סופי.",
       'סגור',
       expect.anything(),
     );

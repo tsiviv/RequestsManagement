@@ -61,6 +61,14 @@ describe('RequestStatusActionComponent', () => {
     expect(select.getAttribute('aria-label')).toContain('סטטוס סופי');
   });
 
+  it('names the select after the request and its current status, for screen readers', () => {
+    const { fixture } = setup();
+    // Bound through MatSelect's own aria-label input: a plain [attr.aria-label] is overwritten by
+    // MatSelect's host binding (null when it also has aria-labelledby), which the browser check caught.
+    const select = (fixture.nativeElement as HTMLElement).querySelector('mat-select')!;
+    expect(select.getAttribute('aria-label')).toBe('עדכון סטטוס, נוכחי: חדש, עבור Sample');
+  });
+
   it('emits the chosen status but keeps showing the saved one until the parent confirms', () => {
     const { host, control } = setup();
 

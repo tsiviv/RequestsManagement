@@ -25,7 +25,11 @@ public class RequestService(
 
     public async Task<PagedResultDto<RequestDto>> GetRequestsAsync(RequestQueryDto query, CancellationToken cancellationToken = default)
     {
-        ValidateSort(query.SortBy, query.SortDirection);
+        // Missing or blank ("?sortBy=") means the default, not an error.
+        var sortBy = string.IsNullOrWhiteSpace(query.SortBy) ? RequestQueryDto.DefaultSortBy : query.SortBy.Trim();
+        var sortDirection = string.IsNullOrWhiteSpace(query.SortDirection) ? RequestQueryDto.DefaultSortDirection : query.SortDirection.Trim();
+
+        ValidateSort(sortBy, sortDirection);
         ValidateDateRange(query.CreatedFrom, query.CreatedTo);
 
         IQueryable<RequestEntity> requests = db.Requests.AsNoTracking();
@@ -90,12 +94,12 @@ public class RequestService(
             // Deferred join: pick the page's Ids first (an index-only read, no lookups for the
             // skipped rows), then fetch full rows for just those Ids. Plain OFFSET does a key lookup
             // for every skipped row: page 2,501 cost 153,454 reads, against 319 this way.
-            var pageIds = ApplySort(requests, query.SortBy, query.SortDirection)
+            var pageIds = ApplySort(requests, sortBy, sortDirection)
                 .Select(r => r.Id)
                 .Skip((int)skip)
                 .Take(query.PageSize);
 
-            items = await ApplySort(db.Requests.AsNoTracking().Where(r => pageIds.Contains(r.Id)), query.SortBy, query.SortDirection)
+            items = await ApplySort(db.Requests.AsNoTracking().Where(r => pageIds.Contains(r.Id)), sortBy, sortDirection)
                 .Select(RequestMappings.ToDtoProjection)
                 .ToListAsync(cancellationToken);
         }
@@ -177,7 +181,7 @@ public class RequestService(
         // from "no such request" (404), so the common case costs a single query.
         if (history.Count == 0 && !await db.Requests.AnyAsync(r => r.Id == id, cancellationToken))
         {
-            throw new NotFoundException($"Request with id {id} was not found.");
+            throw new NotFoundException(NotFoundMessage(id));
         }
 
         return history;
@@ -194,7 +198,7 @@ public class RequestService(
         var entity = await db.Requests.FirstOrDefaultAsync(r => r.Id == id, cancellationToken);
         if (entity is null)
         {
-            throw new NotFoundException($"Request with id {id} was not found.");
+            throw new NotFoundException(NotFoundMessage(id));
         }
 
         // Early stale check: if the client's version is outdated, its view of the current status is
@@ -225,13 +229,13 @@ public class RequestService(
 
         if (dto.Items is not { Count: > 0 and <= BulkUpdateStatusDto.MaxItems })
         {
-            throw new ValidationException($"Items must contain between 1 and {BulkUpdateStatusDto.MaxItems} requests.");
+            throw new ValidationException($"יש לשלוח בין 1 ל-{BulkUpdateStatusDto.MaxItems} פניות.");
         }
 
         var duplicateIds = dto.Items.GroupBy(i => i.Id).Where(g => g.Count() > 1).Select(g => g.Key).ToList();
         if (duplicateIds.Count > 0)
         {
-            throw new ValidationException($"Each request may appear only once. Duplicate ids: {string.Join(", ", duplicateIds)}.");
+            throw new ValidationException($"כל פנייה יכולה להופיע פעם אחת בלבד. מזהים כפולים: {string.Join(", ", duplicateIds)}.");
         }
 
         var rowVersions = dto.Items.ToDictionary(i => i.Id, i => ParseRowVersion(i.RowVersion, i.Id));
@@ -268,7 +272,7 @@ public class RequestService(
     {
         if (entity is null)
         {
-            return Failed(id, BulkUpdateOutcome.NotFound, $"Request with id {id} was not found.");
+            return Failed(id, BulkUpdateOutcome.NotFound, NotFoundMessage(id));
         }
 
         // Same order as the single update: a stale client gets "reload", not a transition error.
@@ -363,12 +367,12 @@ public class RequestService(
     {
         if (status is null)
         {
-            throw new ValidationException("Status is required.");
+            throw new ValidationException("יש לציין סטטוס.");
         }
 
         if (!Enum.IsDefined(status.Value))
         {
-            throw new ValidationException($"'{status}' is not a valid request status.");
+            throw new ValidationException($"'{status}' אינו סטטוס חוקי. ערכים אפשריים: New, InProgress, Waiting, Completed.");
         }
 
         return status.Value;
@@ -383,26 +387,28 @@ public class RequestService(
         catch (FormatException)
         {
             throw new ValidationException(requestId is null
-                ? "RowVersion must be a valid base64-encoded value."
-                : $"RowVersion of request {requestId} must be a valid base64-encoded value.");
+                ? "ערך ה-RowVersion אינו תקין (נדרש ערך בקידוד base64)."
+                : $"ערך ה-RowVersion של פנייה {requestId} אינו תקין (נדרש ערך בקידוד base64).");
         }
     }
 
+    private static string NotFoundMessage(int id) => $"פנייה מספר {id} לא נמצאה.";
+
     private static string ConflictMessage(int id) =>
-        $"Request {id} was modified by another user since it was loaded. Reload and try again.";
+        $"פנייה {id} עודכנה על ידי משתמש אחר מאז שנטענה. יש לרענן ולנסות שוב.";
 
     private static void ValidateSort(string sortBy, string sortDirection)
     {
-        if (!SortableFields.Contains(sortBy.Trim().ToLowerInvariant()))
+        if (!SortableFields.Contains(sortBy.ToLowerInvariant()))
         {
             throw new ValidationException(
-                $"Invalid sortBy '{sortBy}'. Allowed values: {string.Join(", ", SortableFields)}.");
+                $"שדה המיון '{sortBy}' אינו נתמך. ערכים מותרים: {string.Join(", ", SortableFields)}.");
         }
 
         if (!string.Equals(sortDirection, "asc", StringComparison.OrdinalIgnoreCase) &&
             !string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase))
         {
-            throw new ValidationException($"Invalid sortDirection '{sortDirection}'. Allowed values: asc, desc.");
+            throw new ValidationException($"כיוון המיון '{sortDirection}' אינו נתמך. ערכים מותרים: asc, desc.");
         }
     }
 
@@ -419,7 +425,7 @@ public class RequestService(
     {
         if (createdFrom.HasValue && createdTo.HasValue && createdFrom.Value >= createdTo.Value)
         {
-            throw new ValidationException("CreatedFrom must be earlier than CreatedTo.");
+            throw new ValidationException("תאריך ההתחלה (createdFrom) חייב להיות מוקדם מתאריך הסיום (createdTo).");
         }
     }
 
@@ -434,7 +440,7 @@ public class RequestService(
         // after one page instead of sorting the table. That is also why organization and priority sort
         // by CreatedAt second: their indexes are (OrganizationName, CreatedAt) and (Priority, CreatedAt).
         // Priority is stored as its enum value, so the column order is the business order (Low < High).
-        return sortBy.Trim().ToLowerInvariant() switch
+        return sortBy.ToLowerInvariant() switch
         {
             "id" => OrderBy(query, r => r.Id, descending),
             "updatedat" => ThenBy(OrderBy(query, r => r.UpdatedAt, descending), r => r.Id, descending),

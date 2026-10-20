@@ -12,21 +12,21 @@ public class BulkUpdateStatusDto
     public const int MaxItems = 100;
 
     // Nullable so [Required] can tell "missing" apart from the enum default (New).
-    [Required(ErrorMessage = "Status is required.")]
+    [Required(ErrorMessage = "יש לציין סטטוס.")]
     public RequestStatus? Status { get; set; }
 
-    [Required(ErrorMessage = "Items is required.")]
-    [MinLength(1, ErrorMessage = "Items must contain at least 1 request.")]
-    [MaxLength(MaxItems, ErrorMessage = "Items must contain at most 100 requests.")]
+    [Required(ErrorMessage = "יש לשלוח רשימת פניות.")]
+    [MinLength(1, ErrorMessage = "יש לשלוח פנייה אחת לפחות.")]
+    [MaxLength(MaxItems, ErrorMessage = "ניתן לעדכן עד 100 פניות בבקשה אחת.")]
     public List<BulkUpdateStatusItemDto> Items { get; set; } = [];
 }
 
 public class BulkUpdateStatusItemDto
 {
-    [Range(1, int.MaxValue, ErrorMessage = "Id must be a positive integer.")]
+    [Range(1, int.MaxValue, ErrorMessage = "מזהה הפנייה חייב להיות מספר חיובי.")]
     public int Id { get; set; }
 
     // Base64-encoded RowVersion from the RequestDto the client last read.
-    [Required(ErrorMessage = "RowVersion is required.")]
+    [Required(ErrorMessage = "יש לציין RowVersion.")]
     public string RowVersion { get; set; } = "";
 }

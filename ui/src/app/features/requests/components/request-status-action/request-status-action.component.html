@@ -2,7 +2,7 @@
   <mat-form-field appearance="outline" subscriptSizing="dynamic" class="status-action__field">
     <mat-select
       [formControl]="control"
-      [attr.aria-label]="
+      [aria-label]="
         (isFinal() ? 'סטטוס סופי, לא ניתן לשינוי: ' : 'עדכון סטטוס, נוכחי: ') +
         statusLabels[status()] +
         ', עבור ' +

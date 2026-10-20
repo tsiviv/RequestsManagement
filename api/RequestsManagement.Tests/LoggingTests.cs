@@ -116,6 +116,24 @@ public class LoggingTests
         Assert.Equal(expectedStatus, entry.Values["StatusCode"]);
     }
 
+    [Fact]
+    public async Task ClientErrorEchoingUserInput_CannotForgeLogLines()
+    {
+        // An invalid sortBy is echoed in the error message; a newline in it must not start a fake log entry.
+        var logger = new ListLogger<ExceptionHandlingMiddleware>();
+        var context = new DefaultHttpContext();
+        context.Response.Body = new MemoryStream();
+        var middleware = new ExceptionHandlingMiddleware(
+            _ => throw new ValidationException("Invalid sortBy 'x\r\nfail: Fake entry'."), logger);
+
+        await middleware.InvokeAsync(context);
+
+        var entry = Assert.Single(logger.Entries);
+        Assert.DoesNotContain('\n', entry.Message);
+        Assert.DoesNotContain('\r', entry.Message);
+        Assert.Equal(StatusCodes.Status400BadRequest, context.Response.StatusCode);
+    }
+
     private static async Task<(string DbName, int Id, string RowVersion)> SeedAsync()
     {
         var dbName = Guid.NewGuid().ToString();

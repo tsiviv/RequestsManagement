@@ -12,12 +12,13 @@ import { CurrentUserService, USER_NAME_MAX_LENGTH } from './current-user.service
     <mat-form-field class="user-name-field" appearance="outline" subscriptSizing="dynamic">
       <mat-icon matPrefix aria-hidden="true">person</mat-icon>
       <input
+        #nameInput
         matInput
         aria-label="שם המשתמש שיירשם בהיסטוריית השינויים"
         placeholder="השם שלך"
         [maxLength]="maxLength"
         [value]="currentUser.userName()"
-        (change)="currentUser.setUserName($any($event.target).value)"
+        (change)="currentUser.setUserName(nameInput.value)"
       />
     </mat-form-field>
   `,
