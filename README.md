@@ -210,7 +210,7 @@ Content-Type: application/json
   "failed": 1,
   "results": [
     { "id": 17, "outcome": "Updated", "error": null, "request": { "id": 17, "status": "Completed", "rowVersion": "AAAAAAAAB+k=", "...": "..." } },
-    { "id": 42, "outcome": "Conflict", "error": "Request 42 was modified by another user since it was loaded. Reload and try again.", "request": null }
+    { "id": 42, "outcome": "Conflict", "error": "פנייה 42 עודכנה על ידי משתמש אחר מאז שנטענה. יש לרענן ולנסות שוב.", "request": null }
   ]
 }
 ```
@@ -450,6 +450,7 @@ ORDER BY [r].[CreatedAt] DESC, [r].[Id] DESC
 **מגבלות ידועות:**
 - **`search` לא יכול להשתמש באינדקס:** חיפוש חלקי מתורגם ל-`LIKE '%term%'`, שאינו sargable, ולכן נסרקים כל ה-`Title` וה-`OrganizationName`. ב-100,000 רשומות זה סביר. בהיקף גדול יותר החלופה היא Full-Text Search.
 - **שילוב סטטוס + מטפל:** `Status` אינו חלק מ-`IX_Requests_AssignedTo_CreatedAt`, ולכן הוא נבדק רק אחרי Key Lookup לכל שורה (685 קריאות בטבלה למעלה). אפשר להוסיף `INCLUDE (Status)`, במחיר עדכון אינדקס נוסף בכל שינוי סטטוס.
+
 ## Cache
 
 ### מה נשמר ולמה
@@ -556,7 +557,8 @@ cd ../ui && npx ng test --watch=false          # Frontend
 
 **החלטות ושינויים שעשיתי בעצמי, על ההצעות של ה-AI:**
 - **שדות המיון:**
-  - ה-AI הציע מיון לפי סטטוס, עדיפות ומטפל. החלטתי שלשדות עם מעט ערכים שיש להם סינון (סטטוס, מטפל) אין צורך במיון.
+  - בקוד המקורי היה מיון לפי סטטוס ועדיפות.
+  - החלטתי להסיר את המיון לפי סטטוס, ובהמשך גם את המיון לפי מטפל: לשדות עם מעט ערכים שיש להם סינון אין צורך במיון.
   - השארתי עדיפות, שיש לה סדר עסקי, וארגון, שיש לו כ-200 ערכים.
 - **שפת ההודעות:** דרשתי שכל הודעות השגיאה של השרת יהיו בעברית, כמו הממשק. בעקבות זה טופלו גם ההודעות של ASP.NET עצמו.
 - **תוכנית העבודה:**
