@@ -16,6 +16,18 @@ Accept: application/json
 GET {{RequestsManagement_HostAddress}}/api/requests?createdFrom=2026-08-01&createdTo=2026-07-01
 Accept: application/json
 
+### Update status. Take id + rowVersion from a listing above.
+# X-User-Name is required (recorded as ChangedBy) and is percent-encoded UTF-8,
+# because HTTP headers cannot carry Hebrew as-is: %D7%93%D7%A0%D7%94%20%D7%9B%D7%94%D7%9F = "דנה כהן".
+PATCH {{RequestsManagement_HostAddress}}/api/requests/1/status
+Content-Type: application/json
+X-User-Name: %D7%93%D7%A0%D7%94%20%D7%9B%D7%94%D7%9F
+
+{
+  "status": "InProgress",
+  "rowVersion": "AAAAAAAAB9E="
+}
+
 ### Aggregations
 GET {{RequestsManagement_HostAddress}}/api/requests/summary
 Accept: application/json

@@ -98,7 +98,7 @@ public class StatusTransitionTests
         var (dbName, id, rowVersion) = await SeedRequestAsync(from);
 
         await using var context = CreateContext(dbName);
-        var result = await new RequestService(context).UpdateStatusAsync(id,
+        var result = await CreateService(context).UpdateStatusAsync(id,
             new UpdateRequestStatusDto { Status = to, RowVersion = rowVersion });
 
         Assert.Equal(to, result.Status);
@@ -120,7 +120,7 @@ public class StatusTransitionTests
         await using (var context = CreateContext(dbName))
         {
             await Assert.ThrowsAsync<ValidationException>(() =>
-                new RequestService(context).UpdateStatusAsync(id,
+                CreateService(context).UpdateStatusAsync(id,
                     new UpdateRequestStatusDto { Status = to, RowVersion = rowVersion }));
         }
 
@@ -138,7 +138,7 @@ public class StatusTransitionTests
         await using var context = CreateContext(Guid.NewGuid().ToString());
 
         await Assert.ThrowsAsync<NotFoundException>(() =>
-            new RequestService(context).UpdateStatusAsync(999,
+            CreateService(context).UpdateStatusAsync(999,
                 new UpdateRequestStatusDto { Status = RequestStatus.New, RowVersion = Convert.ToBase64String(new byte[8]) }));
     }
 
@@ -159,7 +159,7 @@ public class StatusTransitionTests
 
         await using var context = CreateContext(dbName);
         await Assert.ThrowsAsync<ConcurrencyConflictException>(() =>
-            new RequestService(context).UpdateStatusAsync(id,
+            CreateService(context).UpdateStatusAsync(id,
                 new UpdateRequestStatusDto { Status = RequestStatus.InProgress, RowVersion = staleRowVersion }));
     }
 

@@ -9,7 +9,7 @@ using RequestsManagement.Policies;
 
 namespace RequestsManagement.Services;
 
-public class RequestService(AppDbContext db) : IRequestService
+public class RequestService(AppDbContext db, ICurrentUser currentUser) : IRequestService
 {
     private static readonly string[] SortableFields =
         ["status", "priority", "createdat", "updatedat"];
@@ -128,6 +128,10 @@ public class RequestService(AppDbContext db) : IRequestService
 
     public async Task<RequestDto> UpdateStatusAsync(int id, UpdateRequestStatusDto dto, CancellationToken cancellationToken = default)
     {
+        // Resolved first: like the checks below, a missing/invalid acting user is bad input (400)
+        // and must be rejected before touching the database.
+        var changedBy = currentUser.UserName;
+
         if (!Enum.IsDefined(dto.Status))
         {
             throw new ValidationException($"'{dto.Status}' is not a valid request status.");

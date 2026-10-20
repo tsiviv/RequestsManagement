@@ -25,7 +25,7 @@ public class RequestStatusHistoryConfiguration : IEntityTypeConfiguration<Reques
 
         builder.Property(h => h.ChangedBy)
             .IsRequired()
-            .HasMaxLength(100);
+            .HasMaxLength(RequestStatusHistoryEntity.ChangedByMaxLength);
 
         // Cascade so re-seeding (which deletes requests) also clears their history.
         builder.HasOne<RequestEntity>()

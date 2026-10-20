@@ -4,6 +4,9 @@ namespace RequestsManagement.Models;
 
 public class RequestStatusHistoryEntity
 {
+    public const int ChangedByMaxLength = 100;
+
+
     public long Id { get; set; }
     public int RequestId { get; set; }
     public RequestStatus PreviousStatus { get; set; }

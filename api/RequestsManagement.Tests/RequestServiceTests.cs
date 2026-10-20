@@ -28,7 +28,7 @@ public class RequestServiceTests
         }
 
         await using var context = CreateContext(dbName);
-        var service = new RequestService(context);
+        var service = CreateService(context);
 
         var result = await service.GetRequestsAsync(new RequestQueryDto
         {
@@ -62,7 +62,7 @@ public class RequestServiceTests
         }
 
         await using var context = CreateContext(dbName);
-        var service = new RequestService(context);
+        var service = CreateService(context);
 
         var result = await service.GetRequestsAsync(new RequestQueryDto
         {
@@ -90,7 +90,7 @@ public class RequestServiceTests
         }
 
         await using var context = CreateContext(dbName);
-        var service = new RequestService(context);
+        var service = CreateService(context);
 
         var result = await service.GetRequestsAsync(new RequestQueryDto
         {
@@ -125,7 +125,7 @@ public class RequestServiceTests
         }
 
         await using var context = CreateContext(dbName);
-        var service = new RequestService(context);
+        var service = CreateService(context);
 
         var result = await service.GetRequestsAsync(new RequestQueryDto
         {
@@ -148,7 +148,7 @@ public class RequestServiceTests
     public async Task GetRequestsAsync_WithCreatedFromNotBeforeCreatedTo_ThrowsValidationException(int daysFromToFrom)
     {
         await using var context = CreateContext(Guid.NewGuid().ToString());
-        var service = new RequestService(context);
+        var service = CreateService(context);
         var from = new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc);
 
         await Assert.ThrowsAsync<ValidationException>(() =>
@@ -172,7 +172,7 @@ public class RequestServiceTests
         }
 
         await using var context = CreateContext(dbName);
-        var service = new RequestService(context);
+        var service = CreateService(context);
 
         var pages = new List<int>();
         for (var page = 1; page <= 3; page++)
@@ -196,7 +196,7 @@ public class RequestServiceTests
     public async Task GetRequestsAsync_WithInvalidSortField_ThrowsValidationException()
     {
         await using var context = CreateContext(Guid.NewGuid().ToString());
-        var service = new RequestService(context);
+        var service = CreateService(context);
 
         await Assert.ThrowsAsync<ValidationException>(() =>
             service.GetRequestsAsync(new RequestQueryDto { SortBy = "'; DROP TABLE Requests;--" }));
@@ -218,7 +218,7 @@ public class RequestServiceTests
         }
 
         await using var context = CreateContext(dbName);
-        var service = new RequestService(context);
+        var service = CreateService(context);
 
         var summary = await service.GetSummaryAsync();
 
@@ -256,7 +256,7 @@ public class RequestServiceTests
         }
 
         await using var context = CreateContext(dbName);
-        var service = new RequestService(context);
+        var service = CreateService(context);
 
         var result = await service.UpdateStatusAsync(requestId,
             new UpdateRequestStatusDto { Status = RequestStatus.InProgress, RowVersion = rowVersion });
@@ -271,7 +271,7 @@ public class RequestServiceTests
     public async Task UpdateStatusAsync_WhenRequestDoesNotExist_ThrowsNotFoundException()
     {
         await using var context = CreateContext(Guid.NewGuid().ToString());
-        var service = new RequestService(context);
+        var service = CreateService(context);
 
         await Assert.ThrowsAsync<NotFoundException>(() =>
             service.UpdateStatusAsync(999, new UpdateRequestStatusDto
@@ -298,7 +298,7 @@ public class RequestServiceTests
         }
 
         await using var context = CreateContext(dbName);
-        var service = new RequestService(context);
+        var service = CreateService(context);
 
         await Assert.ThrowsAsync<ValidationException>(() =>
             service.UpdateStatusAsync(requestId, new UpdateRequestStatusDto
@@ -339,7 +339,7 @@ public class RequestServiceTests
 
         // First client attempts to update using the now-stale RowVersion it originally read.
         await using var staleClientContext = CreateContext(dbName);
-        var service = new RequestService(staleClientContext);
+        var service = CreateService(staleClientContext);
 
         await Assert.ThrowsAsync<ConcurrencyConflictException>(() =>
             service.UpdateStatusAsync(requestId, new UpdateRequestStatusDto
