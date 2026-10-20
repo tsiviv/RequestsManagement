@@ -2,6 +2,8 @@
 
 אפליקציית ניהול בקשות ארגוניות: API מסוג ASP.NET Core REST עם ממשק Angular, מול בסיס נתונים SQL Server. המערכת תומכת בחיפוש, סינון, מיון ודפדוף בין בקשות, הצגת סיכום נתונים, ועדכון סטטוס של בקשה בצורה בטוחה גם כשכמה אנשים עשויים לערוך אותה בו-זמנית.
 
+> **הערה לגבי הקוד הקיים:** חלק מהקוד היה קיים עוד לפני תחילת המבדק הנוכחי. בעבר ניגשתי למשרה במשרד להגנת הסביבה, ובמבדק שם ניתן אותו בסיס פרויקט. השתמשתי בבסיס הזה כנקודת מוצא, והמבדק הנוכחי נבנה מעליו (פירוט הפערים שהושלמו מופיע ב-[docs/WORK_PLAN.md](docs/WORK_PLAN.md)).
+
 ## טכנולוגיות
 
 - Backend: .NET 9, ASP.NET Core, EF Core
@@ -83,6 +85,8 @@ Frontend (`ui/src/app/`):
 - `GET /api/requests` — רשימת בקשות מדופדפת, מסוננת וממוינת
 - `GET /api/requests/summary` — סה"כ ספירות לפי סטטוס ועדיפות
 - `PATCH /api/requests/{id}/status` — עדכון סטטוס של בקשה
+- `GET /api/requests/{id}/history` — היסטוריית שינויי הסטטוס של בקשה, מהחדש לישן
+- `POST /api/requests/status/bulk` — עדכון סטטוס של עד 100 בקשות בקריאה אחת (פירוט בהמשך)
 
 נקודת הקצה של הרשימה תומכת ב:
 
@@ -96,6 +100,61 @@ Frontend (`ui/src/app/`):
 | `page`, `pageSize` | `pageSize` בין 1 ל-100 (ברירת מחדל 20) |
 
 כל הפרמטרים ניתנים לשילוב. קלט לא תקין (שדה מיון לא מורשה, `createdFrom >= createdTo`, מחרוזת ארוכה מדי, תאריך לא תקין) מחזיר `400` בפורמט ProblemDetails. דוגמאות מוכנות להרצה: [RequestsManagement.http](api/RequestsManagement/RequestsManagement.http).
+
+### עדכון סטטוס Bulk – חוזה
+
+```http
+POST /api/requests/status/bulk
+X-User-Name: <שם המשתמש, percent-encoded UTF-8>
+Content-Type: application/json
+
+{
+  "status": "Completed",
+  "items": [
+    { "id": 17, "rowVersion": "AAAAAAAAB9E=" },
+    { "id": 42, "rowVersion": "AAAAAAAAC1A=" }
+  ]
+}
+```
+
+כל פריט נושא `rowVersion` משלו, כך שכל בקשה נבדקת ל-Concurrency בנפרד, בדיוק כמו בעדכון בודד.
+
+**הבחירה: Partial Success.** כל בקשה מעודכנת באופן עצמאי, והתשובה מפרטת מה קרה לכל אחת:
+
+```json
+{
+  "requested": 2,
+  "updated": 1,
+  "failed": 1,
+  "results": [
+    { "id": 17, "outcome": "Updated", "error": null, "request": { "id": 17, "status": "Completed", "rowVersion": "AAAAAAAAB+k=", "...": "..." } },
+    { "id": 42, "outcome": "Conflict", "error": "Request 42 was modified by another user since it was loaded. Reload and try again.", "request": null }
+  ]
+}
+```
+
+| `outcome` | מתי | מה הלקוח עושה |
+|---|---|---|
+| `Updated` | הבקשה עודכנה ונרשמה לה שורת היסטוריה | מחליף את השורה ב-`request` (שכולל את ה-`rowVersion` החדש) |
+| `NotFound` | אין בקשה עם המזהה הזה | מסיר אותה מהבחירה |
+| `Conflict` | ה-`rowVersion` שנשלח מיושן: משתמש אחר עדכן את הבקשה בינתיים | טוען מחדש ומחליט שוב |
+| `InvalidTransition` | המעבר אינו מותר לפי כללי המעברים, או שהבקשה כבר בסטטוס הזה | מוצגת ההודעה מ-`error` |
+
+**קודי HTTP:**
+- **`200`:** כל בקשה תקינה מבחינת מבנה, גם כשחלק מהפריטים, או כולם, נכשלו. `updated` / `failed` מסכמים, ו-`results` מופיעים בסדר הקלט.
+- **`400`:** קלט שגוי ברמת הבקשה כולה, שמעיד על באג בלקוח ולא על מצב של פנייה מסוימת. אף פריט לא מעודכן. המקרים:
+  - `status` חסר או לא חוקי.
+  - `items` ריק או מכיל יותר מ-100 פריטים.
+  - מזהה כפול.
+  - `id` שאינו חיובי.
+  - `rowVersion` חסר או לא בפורמט base64.
+  - כותרת `X-User-Name` חסרה.
+
+**למה Partial Success ולא All-or-Nothing:**
+- **כל פנייה עצמאית:** לכל פנייה `rowVersion` ומחזור חיים משלה, ובמערכת מרובת משתמשים צפוי שחלק מ-100 פניות שנבחרו עודכנו בינתיים על ידי אחרים.
+- **מה All-or-Nothing היה גורם:** קונפליקט אחד היה מכשיל 99 עדכונים תקינים, והמשתמש היה נאלץ לטעון מחדש ולנסות שוב, אולי שוב ושוב כשיש עומס.
+- **מה אובד:** אטומיות בין פניות שונות, שאין לה ערך עסקי כאן. כל פנייה בפני עצמה עדיין מעודכנת אטומית: הסטטוס ושורת ההיסטוריה שלה נשמרים באותה טרנזקציה.
+- **למה לא `207 Multi-Status`:** הוא בא מ-WebDAV, ורוב לקוחות ה-HTTP, כולל `HttpClient` של Angular, לא מטפלים בו באופן מיוחד. `200` עם `updated` / `failed` מפורשים ברור יותר.
 
 ## האתגר שנבחר – Concurrency
 
