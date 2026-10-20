@@ -1,10 +1,11 @@
 import { RequestPriority, RequestStatus } from './request.model';
 
 /**
- * Fields the API can sort by: each has a supporting index. Organization sorts by creation date
- * second (same direction). Status, priority and handler are filters, not sort keys.
+ * Fields the API can sort by: each has a supporting index. Organization and priority sort by
+ * creation date second (same direction); priority orders by urgency (Low < Medium < High).
+ * Status and handler are filters, not sort keys.
  */
-export type RequestSortField = 'createdAt' | 'updatedAt' | 'organizationName' | 'id';
+export type RequestSortField = 'createdAt' | 'updatedAt' | 'organizationName' | 'priority' | 'id';
 
 export type RequestSortDirection = 'asc' | 'desc';
 

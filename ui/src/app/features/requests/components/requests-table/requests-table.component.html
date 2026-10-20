@@ -58,7 +58,8 @@
     </ng-container>
 
     <ng-container matColumnDef="priority">
-      <th mat-header-cell *matHeaderCellDef scope="col">עדיפות</th>
+      <!-- First click shows the most urgent first: that is why anyone sorts by priority. -->
+      <th mat-header-cell *matHeaderCellDef mat-sort-header start="desc" scope="col">עדיפות</th>
       <td mat-cell *matCellDef="let row">
         <span class="badge" [class]="priorityBadgeClass(row)">
           <mat-icon aria-hidden="true">{{ priorityIcon(row) }}</mat-icon>

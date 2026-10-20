@@ -44,6 +44,8 @@ INSERT @queries (label, skip, sql) VALUES
   @cols + N'WHERE OrganizationName = @organization ORDER BY CreatedAt DESC, Id DESC OFFSET @skip ROWS FETCH NEXT @take ROWS ONLY'),
  (N'L5 list: sorted by organization, page 1 - page query', 0,
   @cols + N'ORDER BY OrganizationName, CreatedAt, Id OFFSET @skip ROWS FETCH NEXT @take ROWS ONLY'),
+ (N'L7 list: sorted by priority (most urgent first), page 1 - page query', 0,
+  @cols + N'ORDER BY Priority DESC, CreatedAt DESC, Id DESC OFFSET @skip ROWS FETCH NEXT @take ROWS ONLY'),
  (N'L6 list: free-text search - page query', 0,
   @cols + N'WHERE Title LIKE @search OR OrganizationName LIKE @search ORDER BY CreatedAt DESC, Id DESC OFFSET @skip ROWS FETCH NEXT @take ROWS ONLY'),
  (N'L6 list: free-text search - COUNT', 0,

@@ -195,22 +195,29 @@ Content-Type: application/json
 
 1. **`db.Requests.AsNoTracking()`** — שום דבר עוד לא נשלף. בנוסף, אין מעקב שינויים, כי זו שליפה לקריאה בלבד.
 2. **כל פילטר מוסיף `Where`** לאותו `IQueryable`, ו-EF מתרגם אותו ל-`WHERE` עם פרמטרים. הפרמטרים מאפשרים שימוש חוזר ב-Execution Plan ומונעים SQL Injection.
-3. **`CountAsync`** — `SELECT COUNT(*)` עם אותו `WHERE`. חוזר מספר אחד בלבד.
-4. **עמוד מעבר לסוף התוצאות** — אם ה-offset גדול או שווה לסך התוצאות, השאילתה השנייה לא נשלחת בכלל.
-5. **`ApplySort` + `Skip/Take`** מתורגמים ל-`ORDER BY ... , Id` ול-`OFFSET/FETCH`.
+3. **ספירה:**
+   - **עם פילטרים:** `CountAsync`, כלומר `SELECT COUNT(*)` עם אותו `WHERE`. חוזר מספר אחד בלבד.
+   - **בלי פילטרים:** הסה"כ נלקח מה-Summary שב-Cache, ושאילתת ספירה לא נשלחת בכלל.
+4. **עמוד מעבר לסוף התוצאות** — אם ה-offset גדול או שווה לסך התוצאות, שאילתת העמוד לא נשלחת בכלל.
+5. **`ApplySort` + `Skip/Take` כ-Deferred Join:**
+   - קודם תת-שאילתה בוחרת את מזהי העמוד, עם `ORDER BY ... , Id` ו-`OFFSET/FETCH`, מתוך האינדקס בלבד.
+   - רק עבור המזהים האלה נשלפות השורות המלאות.
+   - כך עמוד עמוק לא משלם Key Lookup על כל שורה שמדלגים עליה: עמוד 2,501 ירד מ-153,454 קריאות ל-319 (ראו [docs/PERFORMANCE.md](docs/PERFORMANCE.md)).
 6. **`Select(RequestMappings.ToDtoProjection)`** — נשלפות רק העמודות של ה-DTO, ולא ישויות מלאות.
 7. **`ToListAsync`** — זו נקודת ה-materialization היחידה, ומגיעות בה לכל היותר `pageSize` שורות (100 לכל היותר).
 
-צורת ה-SQL ש-EF מייצר (סינון לפי מטפל וטווח תאריכים, מיון ברירת המחדל):
+ה-SQL ש-EF מייצר בפועל (סינון לפי ארגון, מיון ברירת המחדל):
 
 ```sql
 SELECT [r].[Id], [r].[Title], [r].[OrganizationName], [r].[AssignedTo], [r].[Status],
        [r].[Priority], [r].[CreatedAt], [r].[UpdatedAt], [r].[RowVersion]
 FROM [Requests] AS [r]
-WHERE [r].[AssignedTo] = @__assignedTo_0
-  AND [r].[CreatedAt] >= @__query_CreatedFrom_Value_1 AND [r].[CreatedAt] < @__query_CreatedTo_Value_2
+WHERE [r].[Id] IN (
+    SELECT [r0].[Id] FROM [Requests] AS [r0]
+    WHERE [r0].[OrganizationName] = @__organizationName_0
+    ORDER BY [r0].[CreatedAt] DESC, [r0].[Id] DESC
+    OFFSET @__p_1 ROWS FETCH NEXT @__p_2 ROWS ONLY)
 ORDER BY [r].[CreatedAt] DESC, [r].[Id] DESC
-OFFSET @__p_3 ROWS FETCH NEXT @__p_4 ROWS ONLY
 ```
 
 `allowedNextStatuses` שב-DTO מחושב בזיכרון מתוך `Status`, כך שאינו מוסיף עמודות ל-SQL.

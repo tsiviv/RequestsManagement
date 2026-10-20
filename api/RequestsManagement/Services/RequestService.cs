@@ -17,10 +17,11 @@ public class RequestService(
     IRequestSummaryCache summaryCache,
     ILogger<RequestService> logger) : IRequestService
 {
-    // Only fields with a supporting index (see ApplySort). Status, priority and handler have few
-    // distinct values and their own filters, so they are filtered on, not sorted by.
+    // Only fields with a supporting index (see ApplySort). Status and handler have few distinct
+    // values and their own filters, so they are filtered on, not sorted by. Priority is sortable
+    // because its values are ordered (Low < Medium < High), so "most urgent first" is meaningful.
     private static readonly string[] SortableFields =
-        ["createdat", "updatedat", "organizationname", "id"];
+        ["createdat", "updatedat", "organizationname", "priority", "id"];
 
     public async Task<PagedResultDto<RequestDto>> GetRequestsAsync(RequestQueryDto query, CancellationToken cancellationToken = default)
     {
@@ -67,7 +68,12 @@ public class RequestService(
             requests = requests.Where(r => r.CreatedAt < query.CreatedTo.Value);
         }
 
-        var totalCount = await requests.CountAsync(cancellationToken);
+        // Unfiltered, the count is the summary's total: already cached and invalidated on every
+        // change, so the most common request skips a COUNT over the whole table (~60-70 ms at 100K).
+        // Filtered counts are index seeks and stay exact queries. See docs/PERFORMANCE.md.
+        var totalCount = HasFilters(query)
+            ? await requests.CountAsync(cancellationToken)
+            : (await GetSummaryAsync(cancellationToken)).Total;
 
         // Computed as a long so an extreme but otherwise valid Int32 page (e.g. int.MaxValue)
         // can never overflow the Int32 Skip/Take EF Core requires. When the offset is at or
@@ -81,11 +87,15 @@ public class RequestService(
         }
         else
         {
-            requests = ApplySort(requests, query.SortBy, query.SortDirection);
-
-            items = await requests
+            // Deferred join: pick the page's Ids first (an index-only read, no lookups for the
+            // skipped rows), then fetch full rows for just those Ids. Plain OFFSET does a key lookup
+            // for every skipped row: page 2,501 cost 153,454 reads, against 319 this way.
+            var pageIds = ApplySort(requests, query.SortBy, query.SortDirection)
+                .Select(r => r.Id)
                 .Skip((int)skip)
-                .Take(query.PageSize)
+                .Take(query.PageSize);
+
+            items = await ApplySort(db.Requests.AsNoTracking().Where(r => pageIds.Contains(r.Id)), query.SortBy, query.SortDirection)
                 .Select(RequestMappings.ToDtoProjection)
                 .ToListAsync(cancellationToken);
         }
@@ -396,6 +406,15 @@ public class RequestService(
         }
     }
 
+    private static bool HasFilters(RequestQueryDto query) =>
+        !string.IsNullOrWhiteSpace(query.Search) ||
+        query.Status.HasValue ||
+        query.Priority.HasValue ||
+        !string.IsNullOrWhiteSpace(query.OrganizationName) ||
+        !string.IsNullOrWhiteSpace(query.AssignedTo) ||
+        query.CreatedFrom.HasValue ||
+        query.CreatedTo.HasValue;
+
     private static void ValidateDateRange(DateTime? createdFrom, DateTime? createdTo)
     {
         if (createdFrom.HasValue && createdTo.HasValue && createdFrom.Value >= createdTo.Value)
@@ -412,13 +431,15 @@ public class RequestService(
         // sharing a sort value (e.g. ~500 requests per organization) may repeat or vanish across pages.
         // Each order is exactly the key of a supporting index (a non-clustered key implicitly ends with
         // the clustered Id), all in one direction, so SQL Server reads the index in order and stops
-        // after one page instead of sorting the table. That is also why organization sorts by
-        // CreatedAt second: its index is (OrganizationName, CreatedAt).
+        // after one page instead of sorting the table. That is also why organization and priority sort
+        // by CreatedAt second: their indexes are (OrganizationName, CreatedAt) and (Priority, CreatedAt).
+        // Priority is stored as its enum value, so the column order is the business order (Low < High).
         return sortBy.Trim().ToLowerInvariant() switch
         {
             "id" => OrderBy(query, r => r.Id, descending),
             "updatedat" => ThenBy(OrderBy(query, r => r.UpdatedAt, descending), r => r.Id, descending),
             "organizationname" => ThenBy(ThenBy(OrderBy(query, r => r.OrganizationName, descending), r => r.CreatedAt, descending), r => r.Id, descending),
+            "priority" => ThenBy(ThenBy(OrderBy(query, r => r.Priority, descending), r => r.CreatedAt, descending), r => r.Id, descending),
             _ => ThenBy(OrderBy(query, r => r.CreatedAt, descending), r => r.Id, descending)
         };
     }

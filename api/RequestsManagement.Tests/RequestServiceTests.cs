@@ -217,6 +217,62 @@ public class RequestServiceTests
     }
 
     [Theory]
+    [InlineData("asc", new[] { "Low-old", "Low-new", "Medium", "High-old", "High-new" })]
+    [InlineData("desc", new[] { "High-new", "High-old", "Medium", "Low-new", "Low-old" })]
+    public async Task SortingByPriority_OrdersByUrgency_ThenByCreationInTheSameDirection(
+        string direction, string[] expectedTitles)
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var day = new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc);
+        await using (var seedContext = CreateContext(dbName))
+        {
+            // Inserted out of order, and with names that sort differently alphabetically
+            // ("High" < "Low" < "Medium"), so only the enum's urgency order yields the expected list.
+            seedContext.Requests.AddRange(
+                NewRequest("Medium", "Org", RequestStatus.New, RequestPriority.Medium, day.AddDays(4)),
+                NewRequest("High-old", "Org", RequestStatus.New, RequestPriority.High, day),
+                NewRequest("Low-new", "Org", RequestStatus.New, RequestPriority.Low, day.AddDays(3)),
+                NewRequest("High-new", "Org", RequestStatus.New, RequestPriority.High, day.AddDays(2)),
+                NewRequest("Low-old", "Org", RequestStatus.New, RequestPriority.Low, day.AddDays(1)));
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var context = CreateContext(dbName);
+        var result = await CreateService(context).GetRequestsAsync(new RequestQueryDto { SortBy = "priority", SortDirection = direction });
+
+        Assert.Equal(expectedTitles, result.Items.Select(i => i.Title));
+    }
+
+    [Fact]
+    public async Task SortingByPriority_PagesDeterministicallyById()
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var now = DateTime.UtcNow;
+        await using (var seedContext = CreateContext(dbName))
+        {
+            // Same priority and creation time: only the Id tiebreaker defines the order across pages.
+            for (var i = 0; i < 6; i++)
+            {
+                seedContext.Requests.Add(NewRequest($"Req{i}", "Org", RequestStatus.New, RequestPriority.High, now));
+            }
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var context = CreateContext(dbName);
+        var service = CreateService(context);
+
+        var ids = new List<int>();
+        for (var page = 1; page <= 3; page++)
+        {
+            var result = await service.GetRequestsAsync(new RequestQueryDto { Page = page, PageSize = 2, SortBy = "priority", SortDirection = "asc" });
+            ids.AddRange(result.Items.Select(i => i.Id));
+        }
+
+        Assert.Equal(6, ids.Distinct().Count());
+        Assert.Equal(ids.Order(), ids);
+    }
+
+    [Theory]
     [InlineData("asc")]
     [InlineData("desc")]
     public async Task SortingById_OrdersByIdentifier(string direction)
@@ -241,7 +297,6 @@ public class RequestServiceTests
 
     [Theory]
     [InlineData("status")]
-    [InlineData("priority")]
     [InlineData("assignedTo")]
     [InlineData("title")]
     public async Task SortingByAFieldThatIsNotSortable_IsRejected(string sortBy)
@@ -249,7 +304,7 @@ public class RequestServiceTests
         await using var context = CreateContext(Guid.NewGuid().ToString());
         var ex = await Assert.ThrowsAsync<ValidationException>(() =>
             CreateService(context).GetRequestsAsync(new RequestQueryDto { SortBy = sortBy }));
-        Assert.Contains("createdat, updatedat, organizationname, id", ex.Message);
+        Assert.Contains("createdat, updatedat, organizationname, priority, id", ex.Message);
     }
 
     [Fact]

@@ -49,7 +49,8 @@ public class RequestConfiguration : IEntityTypeConfiguration<RequestEntity>
         builder.HasIndex(r => new { r.Status, r.CreatedAt })
             .HasDatabaseName("IX_Requests_Status_CreatedAt");
 
-        // Same for priority: filter + newest first, and the "requests by priority" aggregation.
+        // Same for priority: filter + newest first, the "requests by priority" aggregation, and
+        // sorting by priority (Priority, CreatedAt, Id is exactly this key, read in either direction).
         builder.HasIndex(r => new { r.Priority, r.CreatedAt })
             .HasDatabaseName("IX_Requests_Priority_CreatedAt");
 

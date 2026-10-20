@@ -76,6 +76,27 @@ public class SummaryCacheTests
         Assert.Equal(2, calls);
     }
 
+    // --- List count reuses the summary total --------------------------------------
+
+    [Fact]
+    public async Task UnfilteredList_TakesItsTotalFromTheCachedSummary_FilteredListCountsExactly()
+    {
+        var dbName = await SeedAsync(3);
+        var cache = CreateSummaryCache();
+        await using (var context = CreateContext(dbName))
+        {
+            await CreateService(context, summaryCache: cache).GetSummaryAsync();
+        }
+
+        // A row added behind the cache's back: only a real COUNT would see it.
+        await AddRequestAsync(dbName);
+
+        await using var read = CreateContext(dbName);
+        var service = CreateService(read, summaryCache: cache);
+        Assert.Equal(3, (await service.GetRequestsAsync(new RequestQueryDto())).TotalCount);
+        Assert.Equal(4, (await service.GetRequestsAsync(new RequestQueryDto { Status = RequestStatus.New })).TotalCount);
+    }
+
     // --- Invalidation ------------------------------------------------------------
 
     [Fact]

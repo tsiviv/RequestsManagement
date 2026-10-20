@@ -267,8 +267,25 @@ describe('RequestsPageComponent', () => {
     const sortable = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('th.mat-sort-header')).map((th) =>
       th.textContent?.trim(),
     );
-    // Id, organization, created, updated; status, priority and handler are filters, not sort keys.
-    expect(sortable).toEqual(['מזהה', 'ארגון', 'נוצר', 'עודכן']);
+    // Id, organization, priority, created, updated; status and handler are filters, not sort keys.
+    expect(sortable).toEqual(['מזהה', 'ארגון', 'עדיפות', 'נוצר', 'עודכן']);
+  });
+
+  it('sorts by priority most urgent first on the first click of its header', async () => {
+    flushInitialLoad();
+
+    const priorityHeader = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll<HTMLElement>('th.mat-sort-header')).find(
+      (th) => th.textContent?.trim() === 'עדיפות',
+    )!;
+    priorityHeader.click();
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    const req = httpMock.expectOne((r) => r.url === baseUrl && r.method === 'GET');
+    expect(req.request.params.get('sortBy')).toBe('priority');
+    expect(req.request.params.get('sortDirection')).toBe('desc');
+    expect(req.request.params.get('page')).toBe('1');
+    req.flush(SAMPLE_PAGED);
   });
 
   it('shows the handler of each request in its own column', () => {
