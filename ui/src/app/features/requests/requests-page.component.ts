@@ -9,6 +9,11 @@ import { Sort } from '@angular/material/sort';
 import { PageEvent } from '@angular/material/paginator';
 import { RequestsService } from './requests.service';
 import { CurrentUserService } from '../../core/user/current-user.service';
+import { MatDialog } from '@angular/material/dialog';
+import {
+  RequestHistoryDialogComponent,
+  RequestHistoryDialogData,
+} from './components/request-history-dialog/request-history-dialog.component';
 import { RequestQuery } from './models/request-query.model';
 import { RequestSummary } from './models/request-summary.model';
 import { EMPTY_FILTER_OPTIONS } from './models/request-filter-options.model';
@@ -50,6 +55,7 @@ export class RequestsPageComponent {
   private readonly requestsService = inject(RequestsService);
   private readonly snackBar = inject(MatSnackBar);
   private readonly currentUser = inject(CurrentUserService);
+  private readonly dialog = inject(MatDialog);
 
   private readonly _query = signal<RequestQuery>(DEFAULT_QUERY);
   private readonly _pagedResult = signal<PagedResult<RequestRecord> | null>(null);
@@ -177,6 +183,15 @@ export class RequestsPageComponent {
 
   protected reloadSummary(): void {
     this.summaryReloadToken.update((tick) => tick + 1);
+  }
+
+  protected openHistory(row: RequestRecord): void {
+    this.dialog.open<RequestHistoryDialogComponent, RequestHistoryDialogData>(RequestHistoryDialogComponent, {
+      data: { requestId: row.id, requestTitle: row.title },
+      width: '32rem',
+      maxWidth: '95vw',
+      autoFocus: 'dialog',
+    });
   }
 
   protected onStatusChange(event: RequestStatusChangeEvent): void {

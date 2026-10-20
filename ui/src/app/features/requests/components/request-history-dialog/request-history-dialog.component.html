@@ -1,0 +1,47 @@
+<h2 mat-dialog-title>היסטוריית שינויים</h2>
+
+<mat-dialog-content>
+  <p class="history__subtitle">{{ data.requestTitle }} <span class="history__id">#{{ data.requestId }}</span></p>
+
+  @switch (state().kind) {
+    @case ('loading') {
+      <div class="history__state" role="status">
+        <mat-spinner diameter="32" />
+        <span>טוען היסטוריה…</span>
+      </div>
+    }
+    @case ('error') {
+      <div class="history__state" role="alert">
+        <span>לא ניתן לטעון את ההיסטוריה.</span>
+        <button type="button" mat-button color="primary" (click)="retry()">נסה שוב</button>
+      </div>
+    }
+    @case ('loaded') {
+      @if (entries().length === 0) {
+        <div class="history__state">
+          <mat-icon aria-hidden="true">history</mat-icon>
+          <span>הסטטוס של בקשה זו עדיין לא שונה.</span>
+        </div>
+      } @else {
+        <ol class="history__list" aria-label="שינויי סטטוס, מהחדש לישן">
+          @for (entry of entries(); track entry.id) {
+            <li class="history__entry">
+              <span class="history__transition">
+                {{ statusLabels[entry.previousStatus] }}
+                <mat-icon aria-label="אל" class="history__arrow">arrow_back</mat-icon>
+                {{ statusLabels[entry.newStatus] }}
+              </span>
+              <span class="history__meta">
+                {{ entry.changedBy }} · <time [attr.datetime]="entry.changedAt">{{ entry.changedAt | date: 'd MMM y, HH:mm' }}</time>
+              </span>
+            </li>
+          }
+        </ol>
+      }
+    }
+  }
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button type="button" mat-button mat-dialog-close>סגירה</button>
+</mat-dialog-actions>

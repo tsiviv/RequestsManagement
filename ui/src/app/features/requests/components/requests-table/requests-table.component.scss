@@ -2,6 +2,12 @@
   overflow-x: auto;
 }
 
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
 .requests-table {
   width: 100%;
 

@@ -14,6 +14,8 @@ import { httpErrorInterceptor } from '../../core/interceptors/http-error.interce
 import { userNameInterceptor } from '../../core/interceptors/user-name.interceptor';
 import { CurrentUserService } from '../../core/user/current-user.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
+import { MatDialog } from '@angular/material/dialog';
+import { RequestHistoryDialogComponent } from './components/request-history-dialog/request-history-dialog.component';
 
 const baseUrl = `${environment.apiUrl}/requests`;
 
@@ -194,6 +196,19 @@ describe('RequestsPageComponent', () => {
       (tr) => tr.querySelectorAll('td')[handlerColumn]?.textContent?.trim(),
     );
     expect(handlers).toEqual(['Dana', 'Yossi']);
+  });
+
+  it('opens the change history of the row whose history button was clicked', () => {
+    flushInitialLoad();
+    const dialogOpen = vi.spyOn(TestBed.inject(MatDialog), 'open').mockReturnValue({} as never);
+
+    const buttons = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.row-actions__history');
+    buttons[1].click();
+
+    expect(dialogOpen).toHaveBeenCalledWith(
+      RequestHistoryDialogComponent,
+      expect.objectContaining({ data: { requestId: SAMPLE_ITEMS[1].id, requestTitle: SAMPLE_ITEMS[1].title } }),
+    );
   });
 
   it('offers the organization and handler choices loaded from the API', () => {

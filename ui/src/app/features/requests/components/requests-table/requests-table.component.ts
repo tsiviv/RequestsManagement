@@ -6,6 +6,8 @@ import { MatTableModule } from '@angular/material/table';
 import { MatSortModule, Sort } from '@angular/material/sort';
 import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatIconModule } from '@angular/material/icon';
+import { MatButtonModule } from '@angular/material/button';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import {
   REQUEST_PRIORITY_ICONS,
@@ -47,6 +49,8 @@ const HANDSET_BREAKPOINT = '(max-width: 799.98px)';
     MatSortModule,
     MatPaginatorModule,
     MatIconModule,
+    MatButtonModule,
+    MatTooltipModule,
     RequestStatusActionComponent,
   ],
   templateUrl: './requests-table.component.html',
@@ -66,6 +70,7 @@ export class RequestsTableComponent {
   readonly sortChange = output<Sort>();
   readonly pageChange = output<PageEvent>();
   readonly statusChange = output<RequestStatusChangeEvent>();
+  readonly historyRequested = output<RequestRecord>();
 
   protected readonly statusLabels = REQUEST_STATUS_LABELS;
   protected readonly statusIcons = REQUEST_STATUS_ICONS;

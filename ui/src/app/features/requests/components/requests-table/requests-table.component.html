@@ -63,12 +63,24 @@
     <ng-container matColumnDef="actions">
       <th mat-header-cell *matHeaderCellDef scope="col">פעולות</th>
       <td mat-cell *matCellDef="let row">
-        <app-request-status-action
-          [status]="row.status"
-          [requestTitle]="row.title"
-          [pending]="updatingIds().has(row.id)"
-          (statusChange)="onStatusChange(row, $event)"
-        />
+        <div class="row-actions">
+          <app-request-status-action
+            [status]="row.status"
+            [requestTitle]="row.title"
+            [pending]="updatingIds().has(row.id)"
+            (statusChange)="onStatusChange(row, $event)"
+          />
+          <button
+            type="button"
+            mat-icon-button
+            class="row-actions__history"
+            [attr.aria-label]="'היסטוריית שינויים עבור ' + row.title"
+            matTooltip="היסטוריית שינויים"
+            (click)="historyRequested.emit(row)"
+          >
+            <mat-icon>history</mat-icon>
+          </button>
+        </div>
       </td>
     </ng-container>
 
