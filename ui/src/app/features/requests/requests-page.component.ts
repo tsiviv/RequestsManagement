@@ -29,7 +29,10 @@ import {
   RequestStatusChangeEvent,
   RequestsTableComponent,
 } from './components/requests-table/requests-table.component';
-import { REQUEST_STATUS_LABELS } from './models/request.model';
+import { REQUEST_STATUSES, REQUEST_STATUS_LABELS, RequestStatus } from './models/request.model';
+import { BulkUpdateStatusResult } from './models/bulk-update-status.model';
+import { BulkActionBarComponent } from './components/bulk-action-bar/bulk-action-bar.component';
+import { BulkResultPanelComponent } from './components/bulk-result-panel/bulk-result-panel.component';
 
 const DEFAULT_QUERY: RequestQuery = {
   page: 1,
@@ -47,6 +50,8 @@ const DEFAULT_QUERY: RequestQuery = {
     RequestSummaryComponent,
     RequestFiltersComponent,
     RequestsTableComponent,
+    BulkActionBarComponent,
+    BulkResultPanelComponent,
   ],
   templateUrl: './requests-page.component.html',
   styleUrl: './requests-page.component.scss',
@@ -68,6 +73,15 @@ export class RequestsPageComponent {
 
   private readonly _updatingIds = signal<ReadonlySet<number>>(new Set());
 
+  // Bulk update. Selection is per page: it is cleared whenever the page shows new data, so it
+  // never holds rowVersions of rows that are no longer on screen (a page holds at most 100 rows,
+  // the server's bulk limit).
+  private readonly _selectedIds = signal<ReadonlySet<number>>(new Set());
+  private readonly _bulkPending = signal(false);
+  private readonly _bulkResult = signal<{ result: BulkUpdateStatusResult; titles: ReadonlyMap<number, string> } | null>(
+    null,
+  );
+
   /** Read-only view of state for the template and tests; all writes go through the private signals above. */
   protected readonly query = this._query.asReadonly();
   readonly pagedResult = this._pagedResult.asReadonly();
@@ -77,6 +91,19 @@ export class RequestsPageComponent {
   readonly summaryLoading = this._summaryLoading.asReadonly();
   readonly summaryError = this._summaryError.asReadonly();
   readonly updatingIds = this._updatingIds.asReadonly();
+  readonly selectedIds = this._selectedIds.asReadonly();
+  readonly bulkPending = this._bulkPending.asReadonly();
+  readonly bulkResult = this._bulkResult.asReadonly();
+
+  private readonly selectedRows = computed(() =>
+    (this._pagedResult()?.items ?? []).filter((row) => this._selectedIds().has(row.id)),
+  );
+
+  /** Statuses at least one selected request may move to, in the usual status order. */
+  protected readonly bulkTargetStatuses = computed(() => {
+    const allowed = new Set(this.selectedRows().flatMap((row) => row.allowedNextStatuses));
+    return REQUEST_STATUSES.filter((status) => allowed.has(status));
+  });
 
   private readonly reloadToken = signal(0);
   private readonly summaryReloadToken = signal(0);
@@ -134,6 +161,7 @@ export class RequestsPageComponent {
       if (result) {
         this._error.set(null);
         this._pagedResult.set(result);
+        this._selectedIds.set(new Set());
       }
     });
 
@@ -200,11 +228,7 @@ export class RequestsPageComponent {
       return;
     }
 
-    // The server rejects changes without a name (400); say why up front instead of a generic error.
-    if (!this.currentUser.hasUserName()) {
-      this.snackBar.open('יש להזין את שמך בשדה שבראש העמוד לפני עדכון סטטוס. השם נרשם בהיסטוריית השינויים.', 'סגור', {
-        duration: 6000,
-      });
+    if (!this.ensureUserName()) {
       return;
     }
 
@@ -213,14 +237,7 @@ export class RequestsPageComponent {
     this.requestsService.updateStatus(row.id, { status, rowVersion: row.rowVersion }).subscribe({
       next: (updated) => {
         this.setUpdating(row.id, false);
-        this._pagedResult.update((current) =>
-          current
-            ? {
-                ...current,
-                items: current.items.map((item) => (item.id === updated.id ? updated : item)),
-              }
-            : current,
-        );
+        this.replaceRows([updated]);
         this.snackBar.open(`הסטטוס עודכן ל${REQUEST_STATUS_LABELS[updated.status]}.`, 'סגור', {
           duration: 4000,
         });
@@ -236,6 +253,87 @@ export class RequestsPageComponent {
         }
       },
     });
+  }
+
+  protected toggleRowSelection(row: RequestRecord): void {
+    this._selectedIds.update((current) => {
+      const next = new Set(current);
+      if (!next.delete(row.id)) {
+        next.add(row.id);
+      }
+      return next;
+    });
+  }
+
+  protected toggleAllSelection(selectAll: boolean): void {
+    this._selectedIds.set(new Set(selectAll ? (this._pagedResult()?.items ?? []).map((row) => row.id) : []));
+  }
+
+  protected clearSelection(): void {
+    this._selectedIds.set(new Set());
+  }
+
+  protected dismissBulkResult(): void {
+    this._bulkResult.set(null);
+  }
+
+  protected onBulkApply(status: RequestStatus): void {
+    const rows = this.selectedRows();
+    if (this._bulkPending() || rows.length === 0 || !this.ensureUserName()) {
+      return;
+    }
+
+    // Titles are kept with the result: the rows may be reloaded before the user reads it.
+    const titles = new Map(rows.map((row) => [row.id, row.title]));
+    this._bulkPending.set(true);
+    this._bulkResult.set(null);
+
+    this.requestsService
+      .bulkUpdateStatus({ status, items: rows.map((row) => ({ id: row.id, rowVersion: row.rowVersion })) })
+      .subscribe({
+        next: (result) => {
+          this._bulkPending.set(false);
+          this._bulkResult.set({ result, titles });
+          this.replaceRows(result.results.flatMap((r) => (r.request ? [r.request] : [])));
+          // Failed rows stay selected so the user can see them and retry (e.g. a different status).
+          this._selectedIds.set(new Set(result.results.filter((r) => r.outcome !== 'Updated').map((r) => r.id)));
+
+          if (result.updated > 0) {
+            this.reloadSummary();
+          }
+          // Conflicts and missing requests mean the page is stale; fetch it again (fresh rowVersions).
+          if (result.results.some((r) => r.outcome === 'Conflict' || r.outcome === 'NotFound')) {
+            this.reloadRequests();
+          }
+        },
+        error: (apiError: ApiError) => {
+          // Request-level rejection (400): nothing was updated.
+          this._bulkPending.set(false);
+          this.snackBar.open(updateErrorMessage(apiError), 'סגור', { duration: 8000 });
+        },
+      });
+  }
+
+  /** The server rejects changes without a name (400); say why up front instead of a generic error. */
+  private ensureUserName(): boolean {
+    if (this.currentUser.hasUserName()) {
+      return true;
+    }
+    this.snackBar.open('יש להזין את שמך בשדה שבראש העמוד לפני עדכון סטטוס. השם נרשם בהיסטוריית השינויים.', 'סגור', {
+      duration: 6000,
+    });
+    return false;
+  }
+
+  /** Puts the server's updated versions (new status, rowVersion, allowed next statuses) in place. */
+  private replaceRows(updated: readonly RequestRecord[]): void {
+    if (updated.length === 0) {
+      return;
+    }
+    const byId = new Map(updated.map((row) => [row.id, row]));
+    this._pagedResult.update((current) =>
+      current ? { ...current, items: current.items.map((item) => byId.get(item.id) ?? item) } : current,
+    );
   }
 
   private setUpdating(id: number, pending: boolean): void {

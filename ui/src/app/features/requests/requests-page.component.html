@@ -36,6 +36,20 @@
       <mat-progress-bar mode="indeterminate" aria-label="מרענן תוצאות" />
     }
 
+    @if (bulkResult(); as bulk) {
+      <app-bulk-result-panel [result]="bulk.result" [titles]="bulk.titles" (dismiss)="dismissBulkResult()" />
+    }
+
+    @if (selectedIds().size > 0) {
+      <app-bulk-action-bar
+        [selectedCount]="selectedIds().size"
+        [targetStatuses]="bulkTargetStatuses()"
+        [pending]="bulkPending()"
+        (apply)="onBulkApply($event)"
+        (clearSelection)="clearSelection()"
+      />
+    }
+
     @if (result.items.length === 0) {
       <div class="state-panel">
         @if (isFiltered()) {
@@ -56,10 +70,13 @@
         [sortBy]="query().sortBy!"
         [sortDirection]="query().sortDirection!"
         [updatingIds]="updatingIds()"
+        [selectedIds]="selectedIds()"
         (sortChange)="onSortChange($event)"
         (pageChange)="onPageChange($event)"
         (statusChange)="onStatusChange($event)"
         (historyRequested)="openHistory($event)"
+        (rowSelectionToggle)="toggleRowSelection($event)"
+        (allSelectionToggle)="toggleAllSelection($event)"
       />
     }
 

@@ -15,6 +15,7 @@ import { userNameInterceptor } from '../../core/interceptors/user-name.intercept
 import { CurrentUserService } from '../../core/user/current-user.service';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialog } from '@angular/material/dialog';
+import { BulkActionBarComponent } from './components/bulk-action-bar/bulk-action-bar.component';
 import { RequestHistoryDialogComponent } from './components/request-history-dialog/request-history-dialog.component';
 
 const baseUrl = `${environment.apiUrl}/requests`;
@@ -383,6 +384,146 @@ describe('RequestsPageComponent', () => {
 
     const reloadReq = httpMock.expectOne((r) => r.url === baseUrl && r.method === 'GET');
     reloadReq.flush(SAMPLE_PAGED);
+  });
+
+  // --- Bulk update ---------------------------------------------------------------
+
+  function getBulkBar(): BulkActionBarComponent | null {
+    return (fixture.debugElement.query(By.directive(BulkActionBarComponent))?.componentInstance as BulkActionBarComponent) ?? null;
+  }
+
+  function selectBothRows(): void {
+    getTable().rowSelectionToggle.emit(SAMPLE_ITEMS[0]);
+    getTable().rowSelectionToggle.emit(SAMPLE_ITEMS[1]);
+    fixture.detectChanges();
+  }
+
+  it('shows the bulk bar only while rows are selected, offering the union of their allowed statuses', () => {
+    flushInitialLoad();
+    expect(getBulkBar()).toBeNull();
+
+    selectBothRows();
+
+    expect(getBulkBar()!.selectedCount()).toBe(2);
+    // New -> [InProgress] and InProgress -> [Waiting, Completed], in status order.
+    expect(getBulkBar()!.targetStatuses()).toEqual(['InProgress', 'Waiting', 'Completed']);
+
+    getTable().rowSelectionToggle.emit(SAMPLE_ITEMS[1]);
+    fixture.detectChanges();
+    expect(getBulkBar()!.targetStatuses()).toEqual(['InProgress']);
+  });
+
+  it('sends every selected request with its own rowVersion and applies a partial success', async () => {
+    flushInitialLoad();
+    selectBothRows();
+
+    getBulkBar()!.apply.emit('Completed');
+
+    const req = httpMock.expectOne(`${baseUrl}/status/bulk`);
+    expect(req.request.method).toBe('POST');
+    expect(req.request.headers.get('X-User-Name')).toBe(encodeURIComponent('דנה כהן'));
+    expect(req.request.body).toEqual({
+      status: 'Completed',
+      items: [
+        { id: 1, rowVersion: SAMPLE_ITEMS[0].rowVersion },
+        { id: 2, rowVersion: SAMPLE_ITEMS[1].rowVersion },
+      ],
+    });
+    expect(component.bulkPending()).toBe(true);
+
+    const updatedSecond: RequestRecord = { ...SAMPLE_ITEMS[1], status: 'Completed', allowedNextStatuses: [], rowVersion: 'AAAAAAAAAAk=' };
+    req.flush({
+      requested: 2,
+      updated: 1,
+      failed: 1,
+      results: [
+        { id: 1, outcome: 'InvalidTransition', error: "Cannot change status from 'New' to 'Completed'.", request: null },
+        { id: 2, outcome: 'Updated', error: null, request: updatedSecond },
+      ],
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(component.bulkPending()).toBe(false);
+    expect(component.pagedResult()?.items[1]).toEqual(updatedSecond);
+    expect(component.pagedResult()?.items[0]).toEqual(SAMPLE_ITEMS[0]);
+    expect([...component.selectedIds()]).toEqual([1]); // the failed one stays selected
+
+    const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text).toContain('עודכנו 1 מתוך 2');
+    expect(text).toContain('נכשלו 1');
+    expect(text).toContain('First request');
+    expect(text).toContain('המעבר אינו מותר');
+
+    // Something changed, so the aggregations are refreshed; no conflict, so no page reload.
+    httpMock.expectOne(`${baseUrl}/summary`).flush(SAMPLE_SUMMARY);
+    httpMock.expectNone((r) => r.url === baseUrl && r.method === 'GET');
+  });
+
+  it('reloads the page after a bulk conflict, since its rowVersions are stale', async () => {
+    flushInitialLoad();
+    selectBothRows();
+    getBulkBar()!.apply.emit('InProgress');
+
+    httpMock.expectOne(`${baseUrl}/status/bulk`).flush({
+      requested: 2,
+      updated: 0,
+      failed: 2,
+      results: [
+        { id: 1, outcome: 'Conflict', error: 'modified by another user', request: null },
+        { id: 2, outcome: 'InvalidTransition', error: 'already InProgress', request: null },
+      ],
+    });
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    httpMock.expectOne((r) => r.url === baseUrl && r.method === 'GET').flush(SAMPLE_PAGED);
+    httpMock.expectNone(`${baseUrl}/summary`); // nothing was updated
+    expect((fixture.nativeElement as HTMLElement).textContent).toContain('עודכנה בינתיים על ידי משתמש אחר');
+  });
+
+  it('header checkbox selects the whole page; new page data clears the selection', async () => {
+    flushInitialLoad();
+    getTable().allSelectionToggle.emit(true);
+    fixture.detectChanges();
+    expect(component.selectedIds().size).toBe(2);
+
+    getTable().pageChange.emit({ pageIndex: 1, pageSize: 25, length: 200, previousPageIndex: 0 });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    httpMock.expectOne((r) => r.url === baseUrl && r.params.get('page') === '2').flush(SAMPLE_PAGED);
+    fixture.detectChanges();
+
+    expect(component.selectedIds().size).toBe(0);
+    expect(getBulkBar()).toBeNull();
+  });
+
+  it('blocks a bulk update without a user name and sends nothing', () => {
+    flushInitialLoad();
+    selectBothRows();
+    TestBed.inject(CurrentUserService).setUserName('');
+
+    getBulkBar()!.apply.emit('Completed');
+
+    httpMock.expectNone(`${baseUrl}/status/bulk`);
+    expect(component.bulkPending()).toBe(false);
+  });
+
+  it('a request-level rejection (400) changes nothing and explains why', () => {
+    flushInitialLoad();
+    selectBothRows();
+    const snackBarOpen = vi.spyOn(TestBed.inject(MatSnackBar), 'open');
+
+    getBulkBar()!.apply.emit('Completed');
+    httpMock.expectOne(`${baseUrl}/status/bulk`).flush(
+      { status: 400, errors: { Items: ['Items must contain at most 100 requests.'] } },
+      { status: 400, statusText: 'Bad Request' },
+    );
+
+    expect(component.bulkPending()).toBe(false);
+    expect(component.pagedResult()?.items).toEqual(SAMPLE_ITEMS);
+    expect(component.selectedIds().size).toBe(2);
+    expect(snackBarOpen).toHaveBeenCalledWith(expect.stringContaining('Items must contain at most 100'), 'סגור', expect.anything());
   });
 
   it('explains a rejected update (400) with the server reason and reloads the stale row', async () => {
