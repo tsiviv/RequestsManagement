@@ -133,6 +133,35 @@ public class StatusTransitionTests
     }
 
     [Fact]
+    public void AllowedNextStatuses_CannotBeMutatedThroughTheSharedInstance()
+    {
+        var allowed = StatusTransitionPolicy.GetAllowedNextStatuses(RequestStatus.New);
+        Assert.False(allowed is RequestStatus[]);
+        Assert.Throws<NotSupportedException>(() => ((IList<RequestStatus>)allowed)[0] = RequestStatus.Completed);
+    }
+
+    [Fact]
+    public async Task ListedRequests_CarryTheirAllowedNextStatuses_AndAnUpdateReturnsTheNewOnes()
+    {
+        var (dbName, id, rowVersion) = await SeedRequestAsync(RequestStatus.New);
+        await using (var seed = CreateContext(dbName))
+        {
+            seed.Requests.Add(NewRequest("Done", "Org", RequestStatus.Completed, RequestPriority.Low, DateTime.UtcNow));
+            await seed.SaveChangesAsync();
+        }
+
+        await using var context = CreateContext(dbName);
+        var service = CreateService(context);
+
+        var listed = (await service.GetRequestsAsync(new RequestQueryDto { SortBy = "createdAt", SortDirection = "asc" })).Items;
+        Assert.Equal([RequestStatus.InProgress], listed.Single(r => r.Id == id).AllowedNextStatuses);
+        Assert.Empty(listed.Single(r => r.Status == RequestStatus.Completed).AllowedNextStatuses);
+
+        var updated = await service.UpdateStatusAsync(id, new UpdateRequestStatusDto { Status = RequestStatus.InProgress, RowVersion = rowVersion });
+        Assert.Equal([RequestStatus.Waiting, RequestStatus.Completed], updated.AllowedNextStatuses);
+    }
+
+    [Fact]
     public async Task UpdateStatusAsync_MissingRequest_Returns404EvenForForbiddenTarget()
     {
         await using var context = CreateContext(Guid.NewGuid().ToString());

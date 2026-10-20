@@ -2,9 +2,15 @@
   <mat-form-field appearance="outline" subscriptSizing="dynamic" class="status-action__field">
     <mat-select
       [formControl]="control"
-      [attr.aria-label]="'עדכון סטטוס, נוכחי: ' + statusLabels[status()] + ', עבור ' + requestTitle()"
+      [attr.aria-label]="
+        (isFinal() ? 'סטטוס סופי, לא ניתן לשינוי: ' : 'עדכון סטטוס, נוכחי: ') +
+        statusLabels[status()] +
+        ', עבור ' +
+        requestTitle()
+      "
+      [attr.title]="isFinal() ? 'סטטוס סופי, לא ניתן לשינוי' : null"
     >
-      @for (option of statuses; track option) {
+      @for (option of options(); track option) {
         <mat-option [value]="option">{{ statusLabels[option] }}</mat-option>
       }
     </mat-select>

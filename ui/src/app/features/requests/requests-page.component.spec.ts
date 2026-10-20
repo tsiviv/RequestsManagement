@@ -29,6 +29,7 @@ const SAMPLE_ITEMS: RequestRecord[] = [
     priority: 'Low',
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
+    allowedNextStatuses: ['InProgress'],
     rowVersion: 'AAAAAAAAAAE=',
   },
   {
@@ -40,6 +41,7 @@ const SAMPLE_ITEMS: RequestRecord[] = [
     priority: 'High',
     createdAt: '2026-01-02T00:00:00Z',
     updatedAt: '2026-01-02T00:00:00Z',
+    allowedNextStatuses: ['Waiting', 'Completed'],
     rowVersion: 'AAAAAAAAAAI=',
   },
 ];
@@ -381,6 +383,28 @@ describe('RequestsPageComponent', () => {
 
     const reloadReq = httpMock.expectOne((r) => r.url === baseUrl && r.method === 'GET');
     reloadReq.flush(SAMPLE_PAGED);
+  });
+
+  it('explains a rejected update (400) with the server reason and reloads the stale row', async () => {
+    flushInitialLoad();
+    const snackBarOpen = vi.spyOn(TestBed.inject(MatSnackBar), 'open');
+
+    const row = SAMPLE_ITEMS[0];
+    getTable().statusChange.emit({ row, status: 'InProgress' });
+    httpMock.expectOne(`${baseUrl}/${row.id}/status`).flush(
+      { status: 400, detail: "Cannot change status from 'Completed' to 'InProgress'. 'Completed' is a final status." },
+      { status: 400, statusText: 'Bad Request' },
+    );
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    expect(snackBarOpen).toHaveBeenCalledWith(
+      "לא ניתן לעדכן את הסטטוס: Cannot change status from 'Completed' to 'InProgress'. 'Completed' is a final status.",
+      'סגור',
+      expect.anything(),
+    );
+    expect(component.updatingIds().has(row.id)).toBe(false);
+    httpMock.expectOne((r) => r.url === baseUrl && r.method === 'GET').flush(SAMPLE_PAGED);
   });
 
   it('blocks a status update without a user name, explaining why, and sends nothing', () => {

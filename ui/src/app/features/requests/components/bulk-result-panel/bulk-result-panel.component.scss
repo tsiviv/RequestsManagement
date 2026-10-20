@@ -1,0 +1,36 @@
+.bulk-result {
+  padding: 0.5rem 1rem;
+  margin-bottom: 0.75rem;
+  border-radius: 0.5rem;
+  background: #e8f5e9;
+  color: #1b5e20;
+
+  &--partial {
+    background: #fff8e1;
+    color: #6d4600;
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  &__summary {
+    font-weight: 500;
+  }
+
+  &__spacer {
+    flex: 1 1 auto;
+  }
+
+  &__failures {
+    margin: 0.25rem 0 0.5rem;
+    padding-inline-start: 2rem;
+    font-size: 0.875rem;
+  }
+
+  &__id {
+    opacity: 0.7;
+  }
+}

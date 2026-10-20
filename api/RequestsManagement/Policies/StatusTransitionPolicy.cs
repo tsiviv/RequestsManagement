@@ -10,12 +10,14 @@ namespace RequestsManagement.Policies;
 public static class StatusTransitionPolicy
 {
     // Completed is terminal; New must be picked up (InProgress) before it can wait or complete.
-    private static readonly Dictionary<RequestStatus, RequestStatus[]> AllowedTransitions = new()
+    // Read-only wrappers: these shared instances are handed to every RequestDto, so a caller must
+    // not be able to cast one back to an array and change the rules for everyone.
+    private static readonly Dictionary<RequestStatus, IReadOnlyList<RequestStatus>> AllowedTransitions = new()
     {
-        [RequestStatus.New] = [RequestStatus.InProgress],
-        [RequestStatus.InProgress] = [RequestStatus.Waiting, RequestStatus.Completed],
-        [RequestStatus.Waiting] = [RequestStatus.InProgress, RequestStatus.Completed],
-        [RequestStatus.Completed] = []
+        [RequestStatus.New] = Array.AsReadOnly([RequestStatus.InProgress]),
+        [RequestStatus.InProgress] = Array.AsReadOnly([RequestStatus.Waiting, RequestStatus.Completed]),
+        [RequestStatus.Waiting] = Array.AsReadOnly([RequestStatus.InProgress, RequestStatus.Completed]),
+        [RequestStatus.Completed] = Array.AsReadOnly(Array.Empty<RequestStatus>())
     };
 
     public static IReadOnlyList<RequestStatus> GetAllowedNextStatuses(RequestStatus current) =>

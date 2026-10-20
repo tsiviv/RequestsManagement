@@ -1,0 +1,37 @@
+<section class="bulk-bar" aria-label="פעולה על הבקשות שנבחרו">
+  <span class="bulk-bar__count" role="status">נבחרו {{ selectedCount() }} בקשות</span>
+
+  @if (targetStatuses().length === 0) {
+    <span class="bulk-bar__hint">לבקשות שנבחרו אין סטטוס שאפשר לעבור אליו (סטטוס סופי).</span>
+  } @else {
+    <mat-form-field appearance="outline" subscriptSizing="dynamic" class="bulk-bar__target">
+      <mat-label>שינוי סטטוס ל-</mat-label>
+      <mat-select [formControl]="target" aria-label="סטטוס יעד לבקשות שנבחרו">
+        @for (status of targetStatuses(); track status) {
+          <mat-option [value]="status">{{ statusLabels[status] }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <button
+      type="button"
+      mat-flat-button
+      color="primary"
+      [disabled]="!target.value || pending() || selectedCount() > maxItems"
+      (click)="submit()"
+    >
+      עדכון הנבחרות
+    </button>
+  }
+
+  @if (pending()) {
+    <mat-spinner diameter="20" aria-hidden="true" />
+    <span class="sr-only" role="status">מעדכן בקשות…</span>
+  }
+
+  <span class="bulk-bar__spacer"></span>
+  <button type="button" mat-button [disabled]="pending()" (click)="clearSelection.emit()">
+    <mat-icon aria-hidden="true">close</mat-icon>
+    ניקוי בחירה
+  </button>
+</section>

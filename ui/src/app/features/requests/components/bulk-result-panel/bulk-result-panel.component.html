@@ -1,0 +1,30 @@
+<section
+  class="bulk-result"
+  [class.bulk-result--partial]="result().failed > 0"
+  role="status"
+  aria-label="תוצאת עדכון קבוצתי"
+>
+  <div class="bulk-result__header">
+    <mat-icon aria-hidden="true">{{ result().failed > 0 ? 'warning' : 'check_circle' }}</mat-icon>
+    <span class="bulk-result__summary">
+      עודכנו {{ result().updated }} מתוך {{ result().requested }}
+      @if (result().failed > 0) {
+        · נכשלו {{ result().failed }}
+      }
+    </span>
+    <span class="bulk-result__spacer"></span>
+    <button type="button" mat-icon-button aria-label="סגירת תוצאת העדכון" (click)="dismiss.emit()">
+      <mat-icon>close</mat-icon>
+    </button>
+  </div>
+
+  @if (failures().length > 0) {
+    <ul class="bulk-result__failures">
+      @for (failure of failures(); track failure.id) {
+        <li [attr.title]="failure.serverError">
+          <strong>{{ failure.title }}</strong> <span class="bulk-result__id">#{{ failure.id }}</span>: {{ failure.reason }}
+        </li>
+      }
+    </ul>
+  }
+</section>

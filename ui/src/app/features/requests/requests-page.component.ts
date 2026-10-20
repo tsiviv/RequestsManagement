@@ -228,8 +228,10 @@ export class RequestsPageComponent {
       },
       error: (apiError: ApiError) => {
         this.setUpdating(row.id, false);
-        this.snackBar.open(apiError.message, 'סגור', { duration: 6000 });
-        if (apiError.kind === 'conflict' || apiError.kind === 'not-found') {
+        this.snackBar.open(updateErrorMessage(apiError), 'סגור', { duration: 8000 });
+        // Conflict / not found / rejected transition all mean the row on screen no longer matches
+        // the server (status, rowVersion or allowed next statuses), so fetch the current page again.
+        if (apiError.kind === 'conflict' || apiError.kind === 'not-found' || apiError.kind === 'validation') {
           this.reloadRequests();
         }
       },
@@ -247,4 +249,12 @@ export class RequestsPageComponent {
       return next;
     });
   }
+}
+
+/** A rejected update (400) explains why, using the server's reason; other kinds keep their message. */
+function updateErrorMessage(error: ApiError): string {
+  if (error.kind === 'validation') {
+    return error.detail ? `לא ניתן לעדכן את הסטטוס: ${error.detail}` : 'לא ניתן לעדכן את הסטטוס.';
+  }
+  return error.message;
 }

@@ -8,6 +8,7 @@ import { MatPaginatorModule, PageEvent } from '@angular/material/paginator';
 import { MatIconModule } from '@angular/material/icon';
 import { MatButtonModule } from '@angular/material/button';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatCheckboxModule } from '@angular/material/checkbox';
 import { BreakpointObserver } from '@angular/cdk/layout';
 import {
   REQUEST_PRIORITY_ICONS,
@@ -26,6 +27,7 @@ export interface RequestStatusChangeEvent {
 }
 
 const ALL_COLUMNS = [
+  'select',
   'id',
   'title',
   'organizationName',
@@ -37,7 +39,7 @@ const ALL_COLUMNS = [
   'actions',
 ] as const;
 
-const HANDSET_COLUMNS = ['title', 'organizationName', 'status', 'priority', 'actions'] as const;
+const HANDSET_COLUMNS = ['select', 'title', 'organizationName', 'status', 'priority', 'actions'] as const;
 
 const HANDSET_BREAKPOINT = '(max-width: 799.98px)';
 
@@ -51,6 +53,7 @@ const HANDSET_BREAKPOINT = '(max-width: 799.98px)';
     MatIconModule,
     MatButtonModule,
     MatTooltipModule,
+    MatCheckboxModule,
     RequestStatusActionComponent,
   ],
   templateUrl: './requests-table.component.html',
@@ -66,11 +69,24 @@ export class RequestsTableComponent {
   readonly sortBy = input.required<RequestSortField>();
   readonly sortDirection = input.required<'asc' | 'desc'>();
   readonly updatingIds = input<ReadonlySet<number>>(new Set());
+  /** Rows selected for a bulk update (owned by the page). */
+  readonly selectedIds = input<ReadonlySet<number>>(new Set());
 
   readonly sortChange = output<Sort>();
   readonly pageChange = output<PageEvent>();
   readonly statusChange = output<RequestStatusChangeEvent>();
   readonly historyRequested = output<RequestRecord>();
+  readonly rowSelectionToggle = output<RequestRecord>();
+  /** Header checkbox: true selects every row on this page, false clears the selection. */
+  readonly allSelectionToggle = output<boolean>();
+
+  private readonly selectedOnPage = computed(
+    () => this.items().filter((row) => this.selectedIds().has(row.id)).length,
+  );
+  protected readonly allSelected = computed(
+    () => this.items().length > 0 && this.selectedOnPage() === this.items().length,
+  );
+  protected readonly someSelected = computed(() => this.selectedOnPage() > 0 && !this.allSelected());
 
   protected readonly statusLabels = REQUEST_STATUS_LABELS;
   protected readonly statusIcons = REQUEST_STATUS_ICONS;

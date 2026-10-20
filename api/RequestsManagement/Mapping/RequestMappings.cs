@@ -1,6 +1,7 @@
 using System.Linq.Expressions;
 using RequestsManagement.DTOs;
 using RequestsManagement.Models;
+using RequestsManagement.Policies;
 
 namespace RequestsManagement.Mapping;
 
@@ -18,6 +19,9 @@ public static class RequestMappings
         Priority = r.Priority,
         CreatedAt = r.CreatedAt,
         UpdatedAt = r.UpdatedAt,
+        // Evaluated in memory by EF (allowed in the final projection), from the Status column it
+        // already reads; adds no SQL.
+        AllowedNextStatuses = StatusTransitionPolicy.GetAllowedNextStatuses(r.Status),
         RowVersion = Convert.ToBase64String(r.RowVersion)
     };
 

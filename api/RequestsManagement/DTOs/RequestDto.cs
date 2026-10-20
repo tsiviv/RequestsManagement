@@ -13,6 +13,10 @@ public class RequestDto
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 
+    // Statuses this request may move to next, from StatusTransitionPolicy, so clients offer only
+    // valid choices without duplicating the rules. Empty for a final status.
+    public IReadOnlyList<RequestStatus> AllowedNextStatuses { get; set; } = [];
+
     // Base64-encoded concurrency token. Clients must echo this back in
     // UpdateRequestStatusDto so the service can detect stale updates.
     public string RowVersion { get; set; } = "";

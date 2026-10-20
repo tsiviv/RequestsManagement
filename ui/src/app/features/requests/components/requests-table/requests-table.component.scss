@@ -2,6 +2,14 @@
   overflow-x: auto;
 }
 
+.select-cell {
+  width: 3rem;
+}
+
+.row--selected {
+  background: var(--mat-sys-surface-container-high);
+}
+
 .row-actions {
   display: flex;
   align-items: center;
