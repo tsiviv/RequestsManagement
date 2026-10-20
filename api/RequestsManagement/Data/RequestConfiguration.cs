@@ -41,40 +41,39 @@ public class RequestConfiguration : IEntityTypeConfiguration<RequestEntity>
         builder.Property(r => r.RowVersion)
             .IsRowVersion();
 
-        // Supports "filter by status, sorted by newest" — the most common list query.
+        // Every sortable order (RequestService.ApplySort) matches one of these keys exactly; a
+        // non-clustered key implicitly ends with the clustered Id, which is the order's tiebreaker.
+
+        // Supports "filter by status, newest first" (seek on Status, CreatedAt already in order)
+        // and the "requests by status" aggregation. Status is filtered on, not sorted by.
         builder.HasIndex(r => new { r.Status, r.CreatedAt })
             .HasDatabaseName("IX_Requests_Status_CreatedAt");
 
-        // Supports "filter by priority, sorted by newest" (Priority leads so it can be
-        // seeked, CreatedAt trails so the seek is already in sort order); Priority still
-        // leads for the "requests by priority" aggregation.
+        // Same for priority: filter + newest first, and the "requests by priority" aggregation.
         builder.HasIndex(r => new { r.Priority, r.CreatedAt })
             .HasDatabaseName("IX_Requests_Priority_CreatedAt");
 
-        // Supports "a handler's queue, newest first" and handler + date-range filters:
-        // equality seek on AssignedTo, then CreatedAt is both the range predicate and the sort.
+        // Supports "a handler's queue, newest first", handler + date-range filters, and sorting by
+        // handler (AssignedTo, CreatedAt, Id): one index for the filter, the range and the sort.
         builder.HasIndex(r => new { r.AssignedTo, r.CreatedAt })
             .HasDatabaseName("IX_Requests_AssignedTo_CreatedAt");
 
-        // Same shape for the exact OrganizationName filter. Free-text search
-        // (LIKE '%term%') cannot seek on this index; see docs for that trade-off.
+        // Same shape for the exact OrganizationName filter and sorting by organization. Free-text
+        // search (LIKE '%term%') cannot seek on this index; see docs for that trade-off.
         builder.HasIndex(r => new { r.OrganizationName, r.CreatedAt })
             .HasDatabaseName("IX_Requests_OrganizationName_CreatedAt");
 
-        // Supports the unfiltered default-sort listing, CreatedAt range filters and
+        // Supports the unfiltered default listing (newest first), CreatedAt range filters and
         // date-based aggregation.
         builder.HasIndex(r => r.CreatedAt)
             .HasDatabaseName("IX_Requests_CreatedAt");
 
-        // Supports "sort by last updated" — the only sortable column not already covered
-        // by a composite index above. Without it, sorting by UpdatedAt has the same
-        // unindexed-sort risk (tempdb spill under disk/AV contention) that Status/Priority/
-        // CreatedAt are protected against.
+        // Supports sorting by last update ("not touched recently" / "just changed"). Without it,
+        // that sort would be a Sort over the whole table on every page.
         builder.HasIndex(r => r.UpdatedAt)
             .HasDatabaseName("IX_Requests_UpdatedAt");
 
-        // Title/OrganizationName are intentionally not sortable (neither via the API's
-        // SortableFields whitelist nor exposed as sortable columns in the UI) and so have
-        // no dedicated index — only Status, Priority, CreatedAt, UpdatedAt are sortable.
+        // Sorting by Id reads the clustered index (PK) in order. Title is not sortable: it would
+        // need its own index for a free-text column whose order means little to users.
     }
 }

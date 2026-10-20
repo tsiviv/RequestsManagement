@@ -162,7 +162,7 @@ describe('RequestsPageComponent', () => {
     flushInitialLoad();
     expect(text()).not.toContain('טוען בקשות');
 
-    getTable().sortChange.emit({ active: 'priority', direction: 'asc' });
+    getTable().sortChange.emit({ active: 'assignedTo', direction: 'asc' });
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -170,7 +170,7 @@ describe('RequestsPageComponent', () => {
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('mat-progress-bar')).not.toBeNull();
     expect(getTable().items()).toEqual(SAMPLE_ITEMS); // not blanked out while the next page loads
-    httpMock.expectOne((r) => r.url === baseUrl && r.params.get('sortBy') === 'priority').flush(SAMPLE_PAGED);
+    httpMock.expectOne((r) => r.url === baseUrl && r.params.get('sortBy') === 'assignedTo').flush(SAMPLE_PAGED);
     fixture.detectChanges();
     expect(element.querySelector('mat-progress-bar')).toBeNull();
   });
@@ -259,6 +259,16 @@ describe('RequestsPageComponent', () => {
     expect(req.request.params.get('priority')).toBe('High');
     expect(req.request.params.get('page')).toBe('1');
     req.flush(SAMPLE_PAGED);
+  });
+
+  it('offers sorting only on the columns the API can sort by', () => {
+    flushInitialLoad();
+
+    const sortable = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('th.mat-sort-header')).map((th) =>
+      th.textContent?.trim(),
+    );
+    // Id, organization, handler, created, updated; status and priority are filters, not sort keys.
+    expect(sortable).toEqual(['מזהה', 'ארגון', 'מטפל', 'נוצר', 'עודכן']);
   });
 
   it('shows the handler of each request in its own column', () => {
@@ -375,12 +385,12 @@ describe('RequestsPageComponent', () => {
   it('sends the correct sort parameters and resets to page 1 when sorting changes', async () => {
     flushInitialLoad();
 
-    getTable().sortChange.emit({ active: 'status', direction: 'asc' });
+    getTable().sortChange.emit({ active: 'organizationName', direction: 'asc' });
     fixture.detectChanges();
     await fixture.whenStable();
 
     const req = httpMock.expectOne((r) => r.url === baseUrl && r.method === 'GET');
-    expect(req.request.params.get('sortBy')).toBe('status');
+    expect(req.request.params.get('sortBy')).toBe('organizationName');
     expect(req.request.params.get('sortDirection')).toBe('asc');
     expect(req.request.params.get('page')).toBe('1');
     req.flush(SAMPLE_PAGED);

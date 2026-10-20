@@ -1,3 +1,4 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using RequestsManagement.Data;
 using RequestsManagement.DTOs;
@@ -16,8 +17,9 @@ public class RequestService(
     IRequestSummaryCache summaryCache,
     ILogger<RequestService> logger) : IRequestService
 {
+    // Only fields with a supporting index (see ApplySort). Status/priority are filtered on, not sorted by.
     private static readonly string[] SortableFields =
-        ["status", "priority", "createdat", "updatedat"];
+        ["createdat", "updatedat", "assignedto", "organizationname", "id"];
 
     public async Task<PagedResultDto<RequestDto>> GetRequestsAsync(RequestQueryDto query, CancellationToken cancellationToken = default)
     {
@@ -405,17 +407,27 @@ public class RequestService(
     {
         var descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
 
-        var ordered = sortBy.Trim().ToLowerInvariant() switch
+        // Every order ends with Id, making it total so OFFSET paging is deterministic: without it, rows
+        // sharing a sort value (e.g. ~6,700 requests per handler) may repeat or vanish across pages.
+        // Each order is exactly the key of a supporting index (a non-clustered key implicitly ends with
+        // the clustered Id), all in one direction, so SQL Server reads the index in order and stops
+        // after one page instead of sorting the table. That is also why handler / organization sort by
+        // CreatedAt second: their indexes are (AssignedTo, CreatedAt) and (OrganizationName, CreatedAt).
+        return sortBy.Trim().ToLowerInvariant() switch
         {
-            "status" => descending ? query.OrderByDescending(r => r.Status) : query.OrderBy(r => r.Status),
-            "priority" => descending ? query.OrderByDescending(r => r.Priority) : query.OrderBy(r => r.Priority),
-            "updatedat" => descending ? query.OrderByDescending(r => r.UpdatedAt) : query.OrderBy(r => r.UpdatedAt),
-            _ => descending ? query.OrderByDescending(r => r.CreatedAt) : query.OrderBy(r => r.CreatedAt)
+            "id" => OrderBy(query, r => r.Id, descending),
+            "updatedat" => ThenBy(OrderBy(query, r => r.UpdatedAt, descending), r => r.Id, descending),
+            "assignedto" => ThenBy(ThenBy(OrderBy(query, r => r.AssignedTo, descending), r => r.CreatedAt, descending), r => r.Id, descending),
+            "organizationname" => ThenBy(ThenBy(OrderBy(query, r => r.OrganizationName, descending), r => r.CreatedAt, descending), r => r.Id, descending),
+            _ => ThenBy(OrderBy(query, r => r.CreatedAt, descending), r => r.Id, descending)
         };
-
-        // Id tiebreaker makes the order total, so OFFSET paging is deterministic: without it, rows
-        // sharing a sort value (e.g. ~55K with Status = Completed) may repeat or vanish across pages.
-        // Free in SQL Server, since every non-clustered index key already ends with the clustered Id.
-        return descending ? ordered.ThenByDescending(r => r.Id) : ordered.ThenBy(r => r.Id);
     }
+
+    private static IOrderedQueryable<RequestEntity> OrderBy<TKey>(
+        IQueryable<RequestEntity> query, Expression<Func<RequestEntity, TKey>> key, bool descending) =>
+        descending ? query.OrderByDescending(key) : query.OrderBy(key);
+
+    private static IOrderedQueryable<RequestEntity> ThenBy<TKey>(
+        IOrderedQueryable<RequestEntity> query, Expression<Func<RequestEntity, TKey>> key, bool descending) =>
+        descending ? query.ThenByDescending(key) : query.ThenBy(key);
 }

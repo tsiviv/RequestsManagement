@@ -98,7 +98,7 @@ Frontend (`ui/src/app/`):
 | `status`, `priority` | התאמה מדויקת לערך enum |
 | `organizationName`, `assignedTo` | התאמה מדויקת (לאחר Trim) — כדי לאפשר Index Seek |
 | `createdFrom`, `createdTo` | טווח חצי-פתוח: `createdFrom <= CreatedAt < createdTo`. כדי לכלול יום אחרון במלואו, שולחים את היום שאחריו |
-| `sortBy`, `sortDirection` | `status` / `priority` / `createdAt` / `updatedAt`, `asc` / `desc` |
+| `sortBy`, `sortDirection` | `createdAt` (ברירת מחדל) / `updatedAt` / `assignedTo` / `organizationName` / `id`, `asc` / `desc` (ברירת מחדל). פירוט בסעיף "מיון" |
 | `page`, `pageSize` | `pageSize` בין 1 ל-100 (ברירת מחדל 20) |
 
 כל הפרמטרים ניתנים לשילוב. קלט לא תקין (שדה מיון לא מורשה, `createdFrom >= createdTo`, מחרוזת ארוכה מדי, תאריך לא תקין) מחזיר `400` בפורמט ProblemDetails. דוגמאות מוכנות להרצה: [RequestsManagement.http](api/RequestsManagement/RequestsManagement.http).
@@ -201,7 +201,7 @@ Content-Type: application/json
 6. **`Select(RequestMappings.ToDtoProjection)`** — נשלפות רק העמודות של ה-DTO, ולא ישויות מלאות.
 7. **`ToListAsync`** — זו נקודת ה-materialization היחידה, ומגיעות בה לכל היותר `pageSize` שורות (100 לכל היותר).
 
-ה-SQL שנוצר בפועל (סינון לפי מטפל וטווח תאריכים, מיון לפי סטטוס):
+צורת ה-SQL ש-EF מייצר (סינון לפי מטפל וטווח תאריכים, מיון ברירת המחדל):
 
 ```sql
 SELECT [r].[Id], [r].[Title], [r].[OrganizationName], [r].[AssignedTo], [r].[Status],
@@ -209,16 +209,47 @@ SELECT [r].[Id], [r].[Title], [r].[OrganizationName], [r].[AssignedTo], [r].[Sta
 FROM [Requests] AS [r]
 WHERE [r].[AssignedTo] = @__assignedTo_0
   AND [r].[CreatedAt] >= @__query_CreatedFrom_Value_1 AND [r].[CreatedAt] < @__query_CreatedTo_Value_2
-ORDER BY [r].[Status] DESC, [r].[Id] DESC
+ORDER BY [r].[CreatedAt] DESC, [r].[Id] DESC
 OFFSET @__p_3 ROWS FETCH NEXT @__p_4 ROWS ONLY
 ```
+
+`allowedNextStatuses` שב-DTO מחושב בזיכרון מתוך `Status`, כך שאינו מוסיף עמודות ל-SQL.
 
 גם ה-Summary מחושב ב-`GROUP BY` בבסיס הנתונים, כך שחוזרות 4 שורות לסטטוס ו-3 לעדיפות, ולא 100,000 רשומות.
 
 **הגנות נוספות:**
 - **`pageSize` מוגבל ל-100.**
 - **רשימה מורשית של שדות מיון:** אין אפשרות למיין לפי עמודה שאין לה אינדקס תומך.
-- **`Id` כ-tiebreaker בכל מיון:** בלעדיו, שורות עם ערך מיון זהה, למשל כ-55,000 פניות בסטטוס Completed, יכולות להופיע פעמיים או להיעלם בין עמודים. ה-`Id` כבר חלק מהמפתח של כל אינדקס non-clustered, ולכן ה-tiebreaker לא מוסיף Sort.
+- **`Id` כ-tiebreaker בכל מיון:** בלעדיו, שורות עם ערך מיון זהה, למשל כ-6,700 פניות לכל מטפל, יכולות להופיע פעמיים או להיעלם בין עמודים. ה-`Id` כבר חלק מהמפתח של כל אינדקס non-clustered, ולכן ה-tiebreaker לא מוסיף Sort.
+
+### מיון
+
+| `sortBy` | שימוש | הסדר המלא | אינדקס תומך |
+|---|---|---|---|
+| `createdAt` (ברירת מחדל) | הבקשות החדשות או הוותיקות ביותר | `CreatedAt, Id` | `IX_Requests_CreatedAt` |
+| `updatedAt` | בקשות שלא טופלו לאחרונה, או שהשתנו עכשיו | `UpdatedAt, Id` | `IX_Requests_UpdatedAt` |
+| `assignedTo` | מעבר על העבודה של כל מטפל | `AssignedTo, CreatedAt, Id` | `IX_Requests_AssignedTo_CreatedAt` |
+| `organizationName` | סידור ואיתור לפי ארגון | `OrganizationName, CreatedAt, Id` | `IX_Requests_OrganizationName_CreatedAt` |
+| `id` | סדר יציב וברור | `Id` | המפתח הראשי (Clustered) |
+
+כל השדות בסדר המלא הולכים באותו כיוון (`asc` או `desc`).
+
+**למה במיון לפי מטפל או ארגון המיון המשני הוא תאריך היצירה ולא `Id`:**
+- **כך הסדר זהה בדיוק למפתח האינדקס:** האינדקס הוא `(AssignedTo, CreatedAt)`, ומפתח non-clustered מסתיים תמיד ב-`Id`. SQL Server קורא את האינדקס לפי הסדר ונעצר אחרי עמוד אחד.
+- **בדקתי מול SQL Server, עמוד שלישי של 20, על 12,000 רשומות:**
+
+  | סדר | Plan | עמודים שנקראו |
+  |---|---|---|
+  | `AssignedTo, CreatedAt, Id` | `Top` מעל Index Scan מסודר, בלי Sort | 282 |
+  | `AssignedTo, Id` (נאיבי) | `Top` מעל **Sort** על Clustered Index Scan של כל הטבלה | 467, וגדל עם הטבלה |
+
+- **גם הגיוני למשתמש:** בתוך הבקשות של מטפל, הן מסודרות לפי תאריך.
+
+**אין מיון לפי סטטוס, עדיפות או כותרת, בכוונה:**
+- **סטטוס ועדיפות:** מספר ערכים קטן, ולכן מיון לפיהם מוסיף מעט. הצורך האמיתי הוא לסנן לפיהם, וזה קיים.
+- **כותרת:** טקסט חופשי שהסדר שלו כמעט חסר משמעות למשתמש, והיה דורש אינדקס נוסף.
+
+ה-API מחזיר `400` לכל שדה שאינו ברשימה, וב-Angular יש `mat-sort-header` רק לחמש העמודות האלה.
 
 ### האינדקסים ותרחישי החיפוש והסינון
 
@@ -226,8 +257,8 @@ OFFSET @__p_3 ROWS FETCH NEXT @__p_4 ROWS ONLY
 |---|---|---|
 | `IX_Requests_Status_CreatedAt` | סינון לפי סטטוס, החדשים קודם | Seek על `Status`, ואז `CreatedAt` כבר ממוין. משרת גם את `GROUP BY Status` |
 | `IX_Requests_Priority_CreatedAt` | סינון לפי עדיפות, החדשים קודם | אותו עיקרון. משרת גם את `GROUP BY Priority` |
-| `IX_Requests_AssignedTo_CreatedAt` | "התור של מטפל", מטפל + טווח תאריכים | Seek בשוויון על `AssignedTo`, ו-`CreatedAt` משמש גם כטווח וגם כמיון |
-| `IX_Requests_OrganizationName_CreatedAt` | סינון לפי ארגון מדויק | אותו עיקרון |
+| `IX_Requests_AssignedTo_CreatedAt` | "התור של מטפל", מטפל + טווח תאריכים, מיון לפי מטפל | Seek בשוויון על `AssignedTo`, ו-`CreatedAt` משמש גם כטווח וגם כמיון. משרת גם את רשימת המטפלים ב-`filter-options` |
+| `IX_Requests_OrganizationName_CreatedAt` | סינון לפי ארגון מדויק, מיון לפי ארגון | אותו עיקרון |
 | `IX_Requests_CreatedAt` | רשימה ללא סינון (ברירת המחדל), טווח תאריכים בלבד | Seek על טווח, ובסדר המיון |
 | `IX_Requests_UpdatedAt` | מיון לפי "עודכן לאחרונה" | מונע Sort על כל הטבלה |
 | `IX_RequestStatusHistory_RequestId_ChangedAt` | היסטוריית שינויים של פנייה | Seek לפי פנייה, כבר ממוין לפי זמן השינוי |
@@ -246,8 +277,6 @@ OFFSET @__p_3 ROWS FETCH NEXT @__p_4 ROWS ONLY
 **מגבלות ידועות:**
 - **`search` לא יכול להשתמש באינדקס:** חיפוש חלקי מתורגם ל-`LIKE '%term%'`, שאינו sargable, ולכן נסרקים כל ה-`Title` וה-`OrganizationName`. ב-100,000 רשומות זה סביר. בהיקף גדול יותר החלופה היא Full-Text Search.
 - **שילוב סטטוס + מטפל:** `Status` אינו חלק מ-`IX_Requests_AssignedTo_CreatedAt`, ולכן הוא נבדק רק אחרי Key Lookup לכל שורה (685 קריאות בטבלה למעלה). אפשר להוסיף `INCLUDE (Status)`, במחיר עדכון אינדקס נוסף בכל שינוי סטטוס.
-- **אין מיון לפי `Title` / `OrganizationName`, בכוונה:** מיון על עמודות טקסט, במיוחד ב-offset עמוק, דורש Sort על כל הטבלה.
-
 ## Cache
 
 ### מה נשמר ולמה

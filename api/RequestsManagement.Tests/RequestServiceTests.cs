@@ -163,10 +163,10 @@ public class RequestServiceTests
 
         await using (var seedContext = CreateContext(dbName))
         {
-            // All rows share the same Status, so only the Id tiebreaker defines their order.
+            // All rows share the same handler and creation time, so only the Id tiebreaker defines their order.
             for (var i = 0; i < 6; i++)
             {
-                seedContext.Requests.Add(NewRequest($"Req{i}", "Org", RequestStatus.Waiting, RequestPriority.Low, now));
+                seedContext.Requests.Add(NewRequest($"Req{i}", "Org", RequestStatus.Waiting, RequestPriority.Low, now, "Dana"));
             }
             await seedContext.SaveChangesAsync();
         }
@@ -181,7 +181,7 @@ public class RequestServiceTests
             {
                 Page = page,
                 PageSize = 2,
-                SortBy = "status",
+                SortBy = "assignedTo",
                 SortDirection = "desc"
             });
             pages.AddRange(result.Items.Select(i => i.Id));
@@ -190,6 +190,66 @@ public class RequestServiceTests
         // Every row appears exactly once across pages, in descending Id order.
         Assert.Equal(6, pages.Distinct().Count());
         Assert.Equal(pages.OrderByDescending(id => id), pages);
+    }
+
+    [Theory]
+    [InlineData("assignedTo", "asc", new[] { "Dana-old", "Dana-new", "Yossi-old", "Yossi-new" })]
+    [InlineData("assignedTo", "desc", new[] { "Yossi-new", "Yossi-old", "Dana-new", "Dana-old" })]
+    [InlineData("organizationName", "asc", new[] { "Dana-old", "Yossi-old", "Yossi-new", "Dana-new" })]
+    public async Task SortingByHandlerOrOrganization_GroupsThem_ThenOrdersByCreationInTheSameDirection(
+        string sortBy, string direction, string[] expectedTitles)
+    {
+        var dbName = Guid.NewGuid().ToString();
+        var day = new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc);
+        await using (var seedContext = CreateContext(dbName))
+        {
+            seedContext.Requests.AddRange(
+                NewRequest("Yossi-new", "Org B", RequestStatus.New, RequestPriority.Low, day.AddDays(2), "Yossi"),
+                NewRequest("Dana-old", "Org A", RequestStatus.New, RequestPriority.Low, day, "Dana"),
+                NewRequest("Yossi-old", "Org A", RequestStatus.New, RequestPriority.Low, day.AddDays(1), "Yossi"),
+                NewRequest("Dana-new", "Org B", RequestStatus.New, RequestPriority.Low, day.AddDays(3), "Dana"));
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var context = CreateContext(dbName);
+        var result = await CreateService(context).GetRequestsAsync(new RequestQueryDto { SortBy = sortBy, SortDirection = direction });
+
+        Assert.Equal(expectedTitles, result.Items.Select(i => i.Title));
+    }
+
+    [Theory]
+    [InlineData("asc")]
+    [InlineData("desc")]
+    public async Task SortingById_OrdersByIdentifier(string direction)
+    {
+        var dbName = Guid.NewGuid().ToString();
+        await using (var seedContext = CreateContext(dbName))
+        {
+            for (var i = 0; i < 4; i++)
+            {
+                // Creation times deliberately out of Id order, so a date sort would differ.
+                seedContext.Requests.Add(NewRequest($"R{i}", "Org", RequestStatus.New, RequestPriority.Low, DateTime.UtcNow.AddDays(-i)));
+            }
+            await seedContext.SaveChangesAsync();
+        }
+
+        await using var context = CreateContext(dbName);
+        var ids = (await CreateService(context).GetRequestsAsync(new RequestQueryDto { SortBy = "id", SortDirection = direction }))
+            .Items.Select(i => i.Id).ToList();
+
+        Assert.Equal(direction == "asc" ? ids.Order() : ids.OrderDescending(), ids);
+    }
+
+    [Theory]
+    [InlineData("status")]
+    [InlineData("priority")]
+    [InlineData("title")]
+    public async Task SortingByAFieldWithoutSupportingIndex_IsRejected(string sortBy)
+    {
+        await using var context = CreateContext(Guid.NewGuid().ToString());
+        var ex = await Assert.ThrowsAsync<ValidationException>(() =>
+            CreateService(context).GetRequestsAsync(new RequestQueryDto { SortBy = sortBy }));
+        Assert.Contains("createdat, updatedat, assignedto, organizationname, id", ex.Message);
     }
 
     [Fact]
