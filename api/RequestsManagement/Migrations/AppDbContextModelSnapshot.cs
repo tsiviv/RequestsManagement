@@ -79,6 +79,48 @@ namespace RequestsManagement.Migrations
 
                     b.ToTable("Requests", (string)null);
                 });
+
+            modelBuilder.Entity("RequestsManagement.Models.RequestStatusHistoryEntity", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("ChangedAt")
+                        .HasColumnType("datetime2");
+
+                    b.Property<string>("ChangedBy")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<int>("NewStatus")
+                        .HasColumnType("int");
+
+                    b.Property<int>("PreviousStatus")
+                        .HasColumnType("int");
+
+                    b.Property<int>("RequestId")
+                        .HasColumnType("int");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RequestId", "ChangedAt")
+                        .HasDatabaseName("IX_RequestStatusHistory_RequestId_ChangedAt");
+
+                    b.ToTable("RequestStatusHistory", (string)null);
+                });
+
+            modelBuilder.Entity("RequestsManagement.Models.RequestStatusHistoryEntity", b =>
+                {
+                    b.HasOne("RequestsManagement.Models.RequestEntity", null)
+                        .WithMany()
+                        .HasForeignKey("RequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
 #pragma warning restore 612, 618
         }
     }

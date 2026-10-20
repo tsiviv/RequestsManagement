@@ -6,6 +6,7 @@ namespace RequestsManagement.Data;
 public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(options)
 {
     public DbSet<RequestEntity> Requests => Set<RequestEntity>();
+    public DbSet<RequestStatusHistoryEntity> RequestStatusHistory => Set<RequestStatusHistoryEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
