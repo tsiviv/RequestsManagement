@@ -163,7 +163,7 @@ public class RequestServiceTests
 
         await using (var seedContext = CreateContext(dbName))
         {
-            // All rows share the same handler and creation time, so only the Id tiebreaker defines their order.
+            // All rows share the same organization and creation time, so only the Id tiebreaker defines their order.
             for (var i = 0; i < 6; i++)
             {
                 seedContext.Requests.Add(NewRequest($"Req{i}", "Org", RequestStatus.Waiting, RequestPriority.Low, now, "Dana"));
@@ -181,7 +181,7 @@ public class RequestServiceTests
             {
                 Page = page,
                 PageSize = 2,
-                SortBy = "assignedTo",
+                SortBy = "organizationName",
                 SortDirection = "desc"
             });
             pages.AddRange(result.Items.Select(i => i.Id));
@@ -193,11 +193,10 @@ public class RequestServiceTests
     }
 
     [Theory]
-    [InlineData("assignedTo", "asc", new[] { "Dana-old", "Dana-new", "Yossi-old", "Yossi-new" })]
-    [InlineData("assignedTo", "desc", new[] { "Yossi-new", "Yossi-old", "Dana-new", "Dana-old" })]
-    [InlineData("organizationName", "asc", new[] { "Dana-old", "Yossi-old", "Yossi-new", "Dana-new" })]
-    public async Task SortingByHandlerOrOrganization_GroupsThem_ThenOrdersByCreationInTheSameDirection(
-        string sortBy, string direction, string[] expectedTitles)
+    [InlineData("asc", new[] { "Dana-old", "Yossi-old", "Yossi-new", "Dana-new" })]
+    [InlineData("desc", new[] { "Dana-new", "Yossi-new", "Yossi-old", "Dana-old" })]
+    public async Task SortingByOrganization_GroupsThem_ThenOrdersByCreationInTheSameDirection(
+        string direction, string[] expectedTitles)
     {
         var dbName = Guid.NewGuid().ToString();
         var day = new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc);
@@ -212,7 +211,7 @@ public class RequestServiceTests
         }
 
         await using var context = CreateContext(dbName);
-        var result = await CreateService(context).GetRequestsAsync(new RequestQueryDto { SortBy = sortBy, SortDirection = direction });
+        var result = await CreateService(context).GetRequestsAsync(new RequestQueryDto { SortBy = "organizationName", SortDirection = direction });
 
         Assert.Equal(expectedTitles, result.Items.Select(i => i.Title));
     }
@@ -243,13 +242,14 @@ public class RequestServiceTests
     [Theory]
     [InlineData("status")]
     [InlineData("priority")]
+    [InlineData("assignedTo")]
     [InlineData("title")]
-    public async Task SortingByAFieldWithoutSupportingIndex_IsRejected(string sortBy)
+    public async Task SortingByAFieldThatIsNotSortable_IsRejected(string sortBy)
     {
         await using var context = CreateContext(Guid.NewGuid().ToString());
         var ex = await Assert.ThrowsAsync<ValidationException>(() =>
             CreateService(context).GetRequestsAsync(new RequestQueryDto { SortBy = sortBy }));
-        Assert.Contains("createdat, updatedat, assignedto, organizationname, id", ex.Message);
+        Assert.Contains("createdat, updatedat, organizationname, id", ex.Message);
     }
 
     [Fact]

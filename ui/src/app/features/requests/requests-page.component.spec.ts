@@ -162,7 +162,7 @@ describe('RequestsPageComponent', () => {
     flushInitialLoad();
     expect(text()).not.toContain('טוען בקשות');
 
-    getTable().sortChange.emit({ active: 'assignedTo', direction: 'asc' });
+    getTable().sortChange.emit({ active: 'updatedAt', direction: 'asc' });
     fixture.detectChanges();
     await fixture.whenStable();
     fixture.detectChanges();
@@ -170,7 +170,7 @@ describe('RequestsPageComponent', () => {
     const element = fixture.nativeElement as HTMLElement;
     expect(element.querySelector('mat-progress-bar')).not.toBeNull();
     expect(getTable().items()).toEqual(SAMPLE_ITEMS); // not blanked out while the next page loads
-    httpMock.expectOne((r) => r.url === baseUrl && r.params.get('sortBy') === 'assignedTo').flush(SAMPLE_PAGED);
+    httpMock.expectOne((r) => r.url === baseUrl && r.params.get('sortBy') === 'updatedAt').flush(SAMPLE_PAGED);
     fixture.detectChanges();
     expect(element.querySelector('mat-progress-bar')).toBeNull();
   });
@@ -267,8 +267,8 @@ describe('RequestsPageComponent', () => {
     const sortable = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('th.mat-sort-header')).map((th) =>
       th.textContent?.trim(),
     );
-    // Id, organization, handler, created, updated; status and priority are filters, not sort keys.
-    expect(sortable).toEqual(['מזהה', 'ארגון', 'מטפל', 'נוצר', 'עודכן']);
+    // Id, organization, created, updated; status, priority and handler are filters, not sort keys.
+    expect(sortable).toEqual(['מזהה', 'ארגון', 'נוצר', 'עודכן']);
   });
 
   it('shows the handler of each request in its own column', () => {

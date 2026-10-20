@@ -53,8 +53,8 @@ public class RequestConfiguration : IEntityTypeConfiguration<RequestEntity>
         builder.HasIndex(r => new { r.Priority, r.CreatedAt })
             .HasDatabaseName("IX_Requests_Priority_CreatedAt");
 
-        // Supports "a handler's queue, newest first", handler + date-range filters, and sorting by
-        // handler (AssignedTo, CreatedAt, Id): one index for the filter, the range and the sort.
+        // Supports "a handler's queue, newest first" and handler + date-range filters: equality seek
+        // on AssignedTo, then CreatedAt is both the range predicate and the sort.
         builder.HasIndex(r => new { r.AssignedTo, r.CreatedAt })
             .HasDatabaseName("IX_Requests_AssignedTo_CreatedAt");
 

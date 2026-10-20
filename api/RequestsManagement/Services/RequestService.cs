@@ -17,9 +17,10 @@ public class RequestService(
     IRequestSummaryCache summaryCache,
     ILogger<RequestService> logger) : IRequestService
 {
-    // Only fields with a supporting index (see ApplySort). Status/priority are filtered on, not sorted by.
+    // Only fields with a supporting index (see ApplySort). Status, priority and handler have few
+    // distinct values and their own filters, so they are filtered on, not sorted by.
     private static readonly string[] SortableFields =
-        ["createdat", "updatedat", "assignedto", "organizationname", "id"];
+        ["createdat", "updatedat", "organizationname", "id"];
 
     public async Task<PagedResultDto<RequestDto>> GetRequestsAsync(RequestQueryDto query, CancellationToken cancellationToken = default)
     {
@@ -408,16 +409,15 @@ public class RequestService(
         var descending = string.Equals(sortDirection, "desc", StringComparison.OrdinalIgnoreCase);
 
         // Every order ends with Id, making it total so OFFSET paging is deterministic: without it, rows
-        // sharing a sort value (e.g. ~6,700 requests per handler) may repeat or vanish across pages.
+        // sharing a sort value (e.g. ~500 requests per organization) may repeat or vanish across pages.
         // Each order is exactly the key of a supporting index (a non-clustered key implicitly ends with
         // the clustered Id), all in one direction, so SQL Server reads the index in order and stops
-        // after one page instead of sorting the table. That is also why handler / organization sort by
-        // CreatedAt second: their indexes are (AssignedTo, CreatedAt) and (OrganizationName, CreatedAt).
+        // after one page instead of sorting the table. That is also why organization sorts by
+        // CreatedAt second: its index is (OrganizationName, CreatedAt).
         return sortBy.Trim().ToLowerInvariant() switch
         {
             "id" => OrderBy(query, r => r.Id, descending),
             "updatedat" => ThenBy(OrderBy(query, r => r.UpdatedAt, descending), r => r.Id, descending),
-            "assignedto" => ThenBy(ThenBy(OrderBy(query, r => r.AssignedTo, descending), r => r.CreatedAt, descending), r => r.Id, descending),
             "organizationname" => ThenBy(ThenBy(OrderBy(query, r => r.OrganizationName, descending), r => r.CreatedAt, descending), r => r.Id, descending),
             _ => ThenBy(OrderBy(query, r => r.CreatedAt, descending), r => r.Id, descending)
         };
