@@ -139,6 +139,80 @@ describe('RequestsPageComponent', () => {
     expect(component.pagedResult()?.totalCount).toBe(2);
   });
 
+  it('cancels a still-running request when the query changes, so a stale response can never win', async () => {
+    const initial = httpMock.expectOne((r) => r.url === baseUrl && r.method === 'GET');
+    httpMock.expectOne(`${baseUrl}/summary`).flush(SAMPLE_SUMMARY);
+
+    getFilters().form.controls.status.setValue('Waiting');
+    fixture.detectChanges();
+    await fixture.whenStable();
+
+    // switchMap unsubscribed from the first request, which aborts it.
+    expect(initial.cancelled).toBe(true);
+    const replacement = httpMock.expectOne((r) => r.url === baseUrl && r.params.get('status') === 'Waiting');
+    replacement.flush(SAMPLE_PAGED);
+    fixture.detectChanges();
+    expect(component.pagedResult()).toEqual(SAMPLE_PAGED);
+  });
+
+  it('shows a loading state first, then keeps the current rows visible while refreshing', async () => {
+    const text = () => (fixture.nativeElement as HTMLElement).textContent ?? '';
+    expect(text()).toContain('טוען בקשות');
+
+    flushInitialLoad();
+    expect(text()).not.toContain('טוען בקשות');
+
+    getTable().sortChange.emit({ active: 'priority', direction: 'asc' });
+    fixture.detectChanges();
+    await fixture.whenStable();
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.querySelector('mat-progress-bar')).not.toBeNull();
+    expect(getTable().items()).toEqual(SAMPLE_ITEMS); // not blanked out while the next page loads
+    httpMock.expectOne((r) => r.url === baseUrl && r.params.get('sortBy') === 'priority').flush(SAMPLE_PAGED);
+    fixture.detectChanges();
+    expect(element.querySelector('mat-progress-bar')).toBeNull();
+  });
+
+  it('displays the aggregations: total and counts per status and priority', () => {
+    flushInitialLoad();
+
+    const element = fixture.nativeElement as HTMLElement;
+    const statusTiles = Object.fromEntries(
+      Array.from(element.querySelectorAll('.summary__tile:not(.summary__tile--priority)')).map((tile) => [
+        tile.querySelector('.summary__label')?.textContent?.trim(),
+        tile.querySelector('.summary__value')?.textContent?.trim(),
+      ]),
+    );
+    expect(statusTiles).toEqual({ 'סה״כ בקשות': '2', חדש: '1', בטיפול: '1', ממתין: '0', הושלם: '0' });
+
+    const byPriority = Object.fromEntries(
+      Array.from(element.querySelectorAll('.summary__priority-item')).map((item) => [
+        item.querySelector('.summary__priority-name')?.textContent?.trim(),
+        item.querySelector('.summary__priority-count')?.textContent?.trim(),
+      ]),
+    );
+    expect(byPriority).toEqual({ נמוכה: '1', בינונית: '0', גבוהה: '1' });
+  });
+
+  it('shows a summary error with a retry, independently of the list', () => {
+    httpMock.expectOne((r) => r.url === baseUrl && r.method === 'GET').flush(SAMPLE_PAGED);
+    httpMock.expectOne(`${baseUrl}/summary`).flush('down', { status: 500, statusText: 'Server Error' });
+    fixture.detectChanges();
+
+    const element = fixture.nativeElement as HTMLElement;
+    expect(element.textContent).toContain('לא ניתן לטעון את הסיכום');
+    expect(getTable().items()).toEqual(SAMPLE_ITEMS);
+
+    const retry = Array.from(element.querySelectorAll('.summary button')).find((b) => b.textContent?.includes('נסה שוב')) as HTMLButtonElement;
+    retry.click();
+    fixture.detectChanges();
+    httpMock.expectOne(`${baseUrl}/summary`).flush(SAMPLE_SUMMARY);
+    fixture.detectChanges();
+    expect(element.textContent).not.toContain('לא ניתן לטעון את הסיכום');
+  });
+
   it('debounces search input, sending a single query for the final value', async () => {
     flushInitialLoad();
     vi.useFakeTimers();
