@@ -4,6 +4,39 @@
 
 > **הערה לגבי הקוד הקיים:** חלק מהקוד היה קיים עוד לפני תחילת המבדק הנוכחי. בעבר ניגשתי למשרה במשרד להגנת הסביבה, ובמבדק שם ניתן אותו בסיס פרויקט. השתמשתי בבסיס הזה כנקודת מוצא, והמבדק הנוכחי נבנה מעליו (פירוט הפערים שהושלמו מופיע ב-[docs/WORK_PLAN.md](docs/WORK_PLAN.md)).
 
+## לבודקים: התחלה מהירה
+
+```bash
+# 1. API (מריץ migrations ו-seeding של 100,000 רשומות בעלייה הראשונה, כחצי דקה עד דקה)
+cd api/RequestsManagement && dotnet run --launch-profile http     # http://localhost:5088/swagger
+
+# 2. ממשק (בטרמינל נוסף)
+cd ui && npm install && npm start                                  # http://localhost:4200
+
+# 3. בדיקות
+cd api && dotnet test                  # Unit + Integration מול SQL Server (LocalDB)
+cd ui && npx ng test --watch=false     # Angular
+```
+
+בממשק, הזינו שם בשדה שבראש העמוד לפני עדכון סטטוס. השם נרשם בהיסטוריית השינויים.
+
+**איפה כל דרישה מכוסה:**
+
+| סעיף באפיון | מימוש עיקרי | תיעוד |
+|---|---|---|
+| מבנה פנייה, 100K רשומות, יצירה חוזרת | `Models/`, `Data/RequestSeeder.cs` | [Database ו-Seeding](#database-ו-seeding) |
+| 1. שליפה: Pagination, סינון, חיפוש, מיון, Aggregations, Validation | `Services/RequestService.cs`, `DTOs/RequestQueryDto.cs` | [API מרכזיים](#api-מרכזיים), [שליפת נתונים](#שליפת-נתונים-מניעת-טעינה-לזיכרון-ואינדקסים), [מיון](#מיון) |
+| 2. עדכון סטטוס ותחרותיות | `RequestService.UpdateStatusAsync`, `Policies/StatusTransitionPolicy.cs` | [Concurrency ומניעת Lost Update](#concurrency-ומניעת-lost-update) |
+| 3. היסטוריית שינויים | `Models/RequestStatusHistoryEntity.cs`, `GET /api/requests/{id}/history` | [API מרכזיים](#api-מרכזיים) |
+| 4. Bulk | `RequestService.BulkUpdateStatusAsync` | [עדכון סטטוס Bulk – חוזה](#עדכון-סטטוס-bulk--חוזה) |
+| 5. Angular | `ui/src/app/features/requests/` | [Angular](#angular-ארכיטקטורה-ועבודה-מול-ה-api) |
+| 6. ביצועים | `docs/perf/*.sql` | [docs/PERFORMANCE.md](docs/PERFORMANCE.md) |
+| 7. Cache | `Services/MemoryRequestSummaryCache.cs` | [Cache](#cache) |
+| 8. בדיקות אוטומטיות | `api/*.Tests`, `api/*.IntegrationTests`, `ui/**/*.spec.ts` | [בדיקות](#בדיקות) |
+| 9. תכנון עבודה | – | [docs/WORK_PLAN.md](docs/WORK_PLAN.md) |
+| 10. איכות קוד | – | [מבנה הפרויקט](#מבנה-הפרויקט), [טיפול בשגיאות ו-Logging](#טיפול-בשגיאות-ו-logging), [docs/REVIEW.md](docs/REVIEW.md) |
+| 11. תיעוד: החלטות, מגבלה ושיפור, AI | – | [החלטות טכנולוגיות](#החלטות-טכנולוגיות-וחלופות), [מגבלות ידועות](#מגבלות-ידועות), [שימוש ב-AI](#שימוש-ב-ai) |
+
 **מסמכים נוספים:**
 - [docs/WORK_PLAN.md](docs/WORK_PLAN.md): ניתוח הפערים, החלטות התכנון, חלוקה ל-Features ו-Tasks, תלויות, סדר ביצוע והערכות מאמץ.
 - [docs/PERFORMANCE.md](docs/PERFORMANCE.md): מדידות ביצועים על 100,000 רשומות, Execution Plans, אינדקסים, Bottlenecks ושיפורים.
@@ -76,7 +109,7 @@ npm start
 
 - משתמש ב-SQL Server LocalDB.
 - עם עליית האפליקציה, היא מריצה את כל ה-migrations הממתינים של EF Core, ולאחר מכן מבצעת seeding אם בסיס הנתונים ריק.
-- ה-seeding יוצר 100,000 רשומות דטרמיניסטיות — נעשה שימוש ב-seed קבוע ובתאריך קבוע במקום ערכים אקראיים, כך שהנתונים זהים בכל מכונה ובכל הרצה (כ-10–20 שניות בעלייה הראשונה).
+- ה-seeding יוצר 100,000 רשומות דטרמיניסטיות — נעשה שימוש ב-seed קבוע ובתאריך קבוע במקום ערכים אקראיים, כך שהנתונים זהים בכל מכונה ובכל הרצה (בעלייה הראשונה, על מסד חדש: כחצי דקה עד דקה, תלוי במחשב; נמדד 11–69 שניות).
 - ההתפלגות מכוונת להיות מציאותית ולא אחידה: כ-200 ארגונים, 15 מטפלים, רוב הפניות בסטטוס Completed ומיעוטן בעדיפות High — כך שסינונים נפוצים סלקטיביים כמו במערכת אמיתית.
 - ה-seeding בודק תחילה אם כבר קיימים נתונים, כך שהרצה חוזרת של האפליקציה לעולם לא יוצרת כפילויות.
 
@@ -91,23 +124,42 @@ dotnet run --launch-profile http -- --reseed
 
 ## מבנה הפרויקט
 
+```
+api/
+  RequestsManagement/                 ה-API
+  RequestsManagement.Tests/           בדיקות Unit (EF InMemory)
+  RequestsManagement.IntegrationTests/ בדיקות Integration (WebApplicationFactory + SQL Server)
+ui/                                   Angular
+docs/                                 תכנון, ביצועים, בדיקות סופיות; docs/perf/ – סקריפטי המדידה
+```
+
 Backend (`api/RequestsManagement/`):
 
-- `Controllers/` — נקודות הקצה של ה-HTTP
-- `Services/` — לוגיקה עסקית: סינון, מיון, אגרגציה, עדכוני סטטוס (בודד ו-Bulk), היסטוריה; זיהוי המשתמש (`ICurrentUser`); Cache ל-Summary (`IRequestSummaryCache`)
-- `Policies/` — כללי מעברי הסטטוס (`StatusTransitionPolicy`), מקור אמת יחיד לעדכון בודד ול-Bulk
-- `DTOs/` — מבני הבקשה/תגובה
-- `Mapping/` — מיפוי יחיד Entity→DTO (Expression שמתורגם ל-SQL, וגרסה מקומפלת לאובייקטים בזיכרון)
-- `Models/` — ישויות EF Core
-- `Data/` — DbContext, הגדרת הישויות, seeding
-- `Enums/` — ערכי סטטוס ועדיפות
-- `Exceptions/` / `Middleware/` — טיפול מרוכז בשגיאות
+- `Controllers/`: נקודות הקצה של ה-HTTP. דקות: מקבלות קלט ומחזירות את תוצאת ה-Service.
+- `Services/`:
+  - הלוגיקה העסקית: סינון, מיון, Aggregation, עדכוני סטטוס (בודד ו-Bulk) והיסטוריה.
+  - זיהוי המשתמש (`ICurrentUser`).
+  - Cache ל-Summary (`IRequestSummaryCache`).
+- `Policies/`: כללי מעברי הסטטוס (`StatusTransitionPolicy`), מקור אמת יחיד לעדכון בודד ול-Bulk.
+- `DTOs/`: מבני הבקשה והתגובה, עם ולידציה.
+- `Mapping/`: מיפוי יחיד Entity→DTO. Expression שמתורגם ל-SQL, וגרסה מקומפלת לאובייקטים בזיכרון.
+- `Models/`: ישויות EF Core.
+- `Data/`: DbContext, הגדרת הישויות והאינדקסים, Seeding.
+- `Migrations/`: היסטוריית הסכמה.
+- `Enums/`: ערכי סטטוס, עדיפות ותוצאות Bulk, ושמות הסטטוסים בעברית.
+- `Exceptions/`, `Middleware/`: טיפול מרוכז בשגיאות.
+- `Extensions/`:
+  - רישום השירותים ב-DI.
+  - הודעות הוולידציה של ASP.NET בעברית.
+  - תיעוד הכותרת `X-User-Name` ב-Swagger.
 
 Frontend (`ui/src/app/`):
 
-- `core/interceptors/` — טיפול מרוכז בשגיאות HTTP
-- `shared/models/` — טיפוסים משותפים לכל הפיצ'רים
-- `features/requests/` — פיצ'ר הבקשות: קומפוננטות, מודלים ושירות
+- `core/interceptors/`: טיפול מרוכז בשגיאות HTTP, והוספת שם המשתמש לבקשות שמשנות נתונים.
+- `core/user/`: שם המשתמש (נשמר בדפדפן) והשדה שלו בסרגל העליון.
+- `core/i18n/`: תרגום ה-Paginator לעברית.
+- `shared/models/`: טיפוסים משותפים לכל הפיצ'רים.
+- `features/requests/`: פיצ'ר הבקשות. ה-Service, הדף שמחזיק את המצב, והקומפוננטות שמציגות בלבד.
 
 ## API מרכזיים
 
