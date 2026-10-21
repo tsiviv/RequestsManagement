@@ -21,7 +21,6 @@ type HistoryState =
   | { kind: 'error'; error: ApiError }
   | { kind: 'loaded'; entries: RequestStatusHistoryEntry[] };
 
-/** Status change history of one request, newest first (the order the API returns). */
 @Component({
   selector: 'app-request-history-dialog',
   imports: [DatePipe, MatDialogModule, MatButtonModule, MatIconModule, MatProgressSpinnerModule],

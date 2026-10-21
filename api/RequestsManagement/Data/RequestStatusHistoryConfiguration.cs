@@ -33,7 +33,6 @@ public class RequestStatusHistoryConfiguration : IEntityTypeConfiguration<Reques
             .HasForeignKey(h => h.RequestId)
             .OnDelete(DeleteBehavior.Cascade);
 
-        // Supports the history endpoint: seek by RequestId, already ordered by ChangedAt.
         // Replaces the FK index EF would otherwise create on RequestId alone.
         builder.HasIndex(h => new { h.RequestId, h.ChangedAt })
             .HasDatabaseName("IX_RequestStatusHistory_RequestId_ChangedAt");

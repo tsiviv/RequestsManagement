@@ -9,7 +9,6 @@ const OUTCOME_LABELS: Record<Exclude<BulkUpdateOutcome, 'Updated'>, string> = {
   NotFound: 'לא נמצאה',
 };
 
-/** Outcome of the last bulk update: how many succeeded, and which failed and why. */
 @Component({
   selector: 'app-bulk-result-panel',
   imports: [MatButtonModule, MatIconModule],

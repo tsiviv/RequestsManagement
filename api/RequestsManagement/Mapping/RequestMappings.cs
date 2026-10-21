@@ -7,8 +7,7 @@ namespace RequestsManagement.Mapping;
 
 public static class RequestMappings
 {
-    // Single source of truth for RequestEntity -> RequestDto. As an expression it can be passed
-    // to IQueryable.Select, so EF reads only the mapped columns instead of materializing entities.
+    // An expression, so IQueryable.Select reads only these columns.
     public static readonly Expression<Func<RequestEntity, RequestDto>> ToDtoProjection = r => new RequestDto
     {
         Id = r.Id,
@@ -19,13 +18,11 @@ public static class RequestMappings
         Priority = r.Priority,
         CreatedAt = r.CreatedAt,
         UpdatedAt = r.UpdatedAt,
-        // Evaluated in memory by EF (allowed in the final projection), from the Status column it
-        // already reads; adds no SQL.
+        // Evaluated in memory from the Status column; adds no SQL.
         AllowedNextStatuses = StatusTransitionPolicy.GetAllowedNextStatuses(r.Status),
         RowVersion = Convert.ToBase64String(r.RowVersion)
     };
 
-    // Compiled once, for entities already in memory (e.g. after an update).
     private static readonly Func<RequestEntity, RequestDto> ToDtoCompiled = ToDtoProjection.Compile();
 
     public static RequestDto ToDto(this RequestEntity entity) => ToDtoCompiled(entity);

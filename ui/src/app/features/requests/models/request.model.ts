@@ -46,8 +46,6 @@ export interface RequestRecord {
   priority: RequestPriority;
   createdAt: string;
   updatedAt: string;
-  /** Statuses this request may move to next, as decided by the server; empty for a final status. */
   allowedNextStatuses: RequestStatus[];
-  /** Base64-encoded optimistic concurrency token; must be echoed back on status updates. */
   rowVersion: string;
 }

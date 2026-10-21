@@ -5,10 +5,7 @@ const STORAGE_KEY = 'requests-management.userName';
 /** Mirrors the server's ChangedBy column limit (RequestStatusHistoryEntity.ChangedByMaxLength). */
 export const USER_NAME_MAX_LENGTH = 100;
 
-/**
- * The name recorded as ChangedBy for status changes. There is no authentication, so the user
- * types it once (toolbar field) and it is remembered in localStorage.
- */
+// No authentication: the user types a name once, and it is remembered in localStorage.
 @Injectable({ providedIn: 'root' })
 export class CurrentUserService {
   private readonly _userName = signal(readStoredName());

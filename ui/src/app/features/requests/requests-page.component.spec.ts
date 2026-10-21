@@ -267,7 +267,6 @@ describe('RequestsPageComponent', () => {
     const sortable = Array.from((fixture.nativeElement as HTMLElement).querySelectorAll('th.mat-sort-header')).map((th) =>
       th.textContent?.trim(),
     );
-    // Id, organization, priority, created, updated; status and handler are filters, not sort keys.
     expect(sortable).toEqual(['מזהה', 'ארגון', 'עדיפות', 'נוצר', 'עודכן']);
   });
 
@@ -307,6 +306,7 @@ describe('RequestsPageComponent', () => {
     const dialogOpen = vi.spyOn(TestBed.inject(MatDialog), 'open').mockReturnValue({} as never);
 
     const buttons = (fixture.nativeElement as HTMLElement).querySelectorAll<HTMLButtonElement>('.row-actions__history');
+    expect(buttons[1].textContent).toContain('היסטוריה');
     buttons[1].click();
 
     expect(dialogOpen).toHaveBeenCalledWith(
@@ -487,8 +487,6 @@ describe('RequestsPageComponent', () => {
     reloadReq.flush(SAMPLE_PAGED);
   });
 
-  // --- Bulk update ---------------------------------------------------------------
-
   function getBulkBar(): BulkActionBarComponent | null {
     return (fixture.debugElement.query(By.directive(BulkActionBarComponent))?.componentInstance as BulkActionBarComponent) ?? null;
   }
@@ -548,7 +546,7 @@ describe('RequestsPageComponent', () => {
     expect(component.bulkPending()).toBe(false);
     expect(component.pagedResult()?.items[1]).toEqual(updatedSecond);
     expect(component.pagedResult()?.items[0]).toEqual(SAMPLE_ITEMS[0]);
-    expect([...component.selectedIds()]).toEqual([1]); // the failed one stays selected
+    expect(component.selectedIds().size).toBe(0);
 
     const text = (fixture.nativeElement as HTMLElement).textContent ?? '';
     expect(text).toContain('עודכנו 1 מתוך 2');

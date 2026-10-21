@@ -1,4 +1,3 @@
-/** Distinct values for the exact-match filters (GET /requests/filter-options). */
 export interface RequestFilterOptions {
   organizations: string[];
   assignees: string[];

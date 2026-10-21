@@ -3,15 +3,8 @@ using RequestsManagement.Exceptions;
 
 namespace RequestsManagement.Policies;
 
-/// <summary>
-/// The single definition of which status changes are allowed. Used by single and bulk
-/// updates alike, and exposed so clients can offer only valid next statuses.
-/// </summary>
 public static class StatusTransitionPolicy
 {
-    // Completed is terminal; New must be picked up (InProgress) before it can wait or complete.
-    // Read-only wrappers: these shared instances are handed to every RequestDto, so a caller must
-    // not be able to cast one back to an array and change the rules for everyone.
     private static readonly Dictionary<RequestStatus, IReadOnlyList<RequestStatus>> AllowedTransitions = new()
     {
         [RequestStatus.New] = Array.AsReadOnly([RequestStatus.InProgress]),
@@ -26,7 +19,7 @@ public static class StatusTransitionPolicy
     public static bool IsAllowed(RequestStatus from, RequestStatus to) =>
         GetAllowedNextStatuses(from).Contains(to);
 
-    /// <summary>Returns why the transition is not allowed, or null when it is.</summary>
+    // Null when allowed; otherwise the reason.
     public static string? Validate(RequestStatus from, RequestStatus to)
     {
         if (from == to)

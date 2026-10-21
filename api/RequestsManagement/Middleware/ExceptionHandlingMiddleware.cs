@@ -14,11 +14,7 @@ public class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Exception
         }
         catch (Exception) when (context.RequestAborted.IsCancellationRequested)
         {
-            // The client went away (e.g. Angular switchMap cancelling a superseded search), so the
-            // CancellationToken aborted the I/O. Not a server error: nobody is left to read a 500,
-            // and logging it as Error would flood the log during normal typing. Filtering on the
-            // token rather than the exception type also covers providers that surface the abort
-            // as their own exception.
+            // Client aborted (e.g. switchMap cancelling a search): not a server error, so no 500 and no Error log.
             logger.LogInformation("Request {Method} {Path} was cancelled by the client", context.Request.Method, context.Request.Path);
             if (!context.Response.HasStarted)
             {
@@ -56,9 +52,7 @@ public class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Exception
         }
         else
         {
-            // Client errors are expected traffic, not warnings. Messages are the app's own exception
-            // texts, never request bodies or header values, but some echo a query value (e.g. an
-            // invalid sortBy), so control characters are replaced to prevent forged log lines.
+            // Some messages echo a query value: control characters are replaced to prevent forged log lines.
             logger.LogInformation("{Method} {Path} -> {StatusCode} {Title}: {Message}",
                 context.Request.Method, context.Request.Path, statusCode, title, WithoutControlCharacters(ex.Message));
         }
@@ -67,7 +61,6 @@ public class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Exception
         {
             Status = statusCode,
             Title = title,
-            // Never leak internal exception details for 500s; app exceptions carry a safe message.
             Detail = statusCode == StatusCodes.Status500InternalServerError
                 ? "אירעה שגיאה בלתי צפויה. נסו שוב מאוחר יותר."
                 : ex.Message,
@@ -75,8 +68,7 @@ public class ExceptionHandlingMiddleware(RequestDelegate next, ILogger<Exception
         };
 
         context.Response.StatusCode = statusCode;
-        // The content type must be passed here: WriteAsJsonAsync otherwise overwrites a previously
-        // set Content-Type with application/json (caught by the integration tests).
+        // WriteAsJsonAsync would otherwise overwrite the Content-Type with application/json.
         await context.Response.WriteAsJsonAsync(problemDetails, options: null, contentType: "application/problem+json");
     }
 }

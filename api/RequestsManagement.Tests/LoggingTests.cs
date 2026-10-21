@@ -14,17 +14,15 @@ public class LoggingTests
 {
     private const string PersonalName = "דנה כהן";
 
-    // --- RequestService --------------------------------------------------------
-
     [Fact]
     public async Task SuccessfulUpdate_LogsInformationWithIdsAndStatuses_ButNotTheUser()
     {
         var (dbName, id, rowVersion) = await SeedAsync();
-        var logger = new ListLogger<RequestService>();
+        var logger = new ListLogger<RequestStatusService>();
 
         await using (var context = CreateContext(dbName))
         {
-            await CreateService(context, new StubCurrentUser(PersonalName), logger).UpdateStatusAsync(id,
+            await CreateStatusService(context, new StubCurrentUser(PersonalName), logger).UpdateStatusAsync(id,
                 new UpdateRequestStatusDto { Status = RequestStatus.InProgress, RowVersion = rowVersion });
         }
 
@@ -41,12 +39,12 @@ public class LoggingTests
     public async Task StaleRowVersion_LogsWarningWithRequestId()
     {
         var (dbName, id, _) = await SeedAsync();
-        var logger = new ListLogger<RequestService>();
+        var logger = new ListLogger<RequestStatusService>();
 
         await using (var context = CreateContext(dbName))
         {
             await Assert.ThrowsAsync<ConcurrencyConflictException>(() =>
-                CreateService(context, logger: logger).UpdateStatusAsync(id, new UpdateRequestStatusDto
+                CreateStatusService(context, logger: logger).UpdateStatusAsync(id, new UpdateRequestStatusDto
                 {
                     Status = RequestStatus.InProgress,
                     RowVersion = Convert.ToBase64String(BitConverter.GetBytes(99L))
@@ -57,8 +55,6 @@ public class LoggingTests
         Assert.Equal(LogLevel.Warning, entry.Level);
         Assert.Equal(id, entry.Values["RequestId"]);
     }
-
-    // --- ExceptionHandlingMiddleware -------------------------------------------
 
     [Fact]
     public async Task ClientCancelledRequest_IsLoggedAsInformation_WithoutWritingA500()

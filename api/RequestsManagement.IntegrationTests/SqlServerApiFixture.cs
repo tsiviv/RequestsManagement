@@ -12,17 +12,9 @@ using RequestsManagement.Services;
 
 namespace RequestsManagement.IntegrationTests;
 
-/// <summary>
-/// Hosts the real API in memory (WebApplicationFactory) against a real SQL Server database, so the
-/// tests exercise what InMemory cannot: SQL translation, rowversion generation, transactions and
-/// the database-enforced concurrency check.
-/// </summary>
-/// <remarks>
-/// One uniquely named database per test run, created by the app's own migrations at startup and
-/// dropped at the end. Defaults to LocalDB; set REQUESTS_IT_SQLSERVER to a connection string
-/// (without a database name) to use another SQL Server, e.g. in CI. Startup seeding is disabled:
-/// each test starts from an empty database (<see cref="ResetAsync"/>) and inserts only what it needs.
-/// </remarks>
+// Real SQL Server, for what InMemory cannot test: SQL translation, rowversion and transactions.
+// One database per run, created by the migrations and dropped at the end. Defaults to LocalDB;
+// REQUESTS_IT_SQLSERVER (a connection string without a database) selects another server.
 public sealed class SqlServerApiFixture : IAsyncLifetime
 {
     public const string DefaultUser = "it-user";
@@ -52,7 +44,6 @@ public sealed class SqlServerApiFixture : IAsyncLifetime
             builder.UseSetting("Seeding:Enabled", "false");
         });
 
-        // Starting the server runs Program's startup: migrations create the database.
         _ = _factory.Server;
         return Task.CompletedTask;
     }
@@ -66,7 +57,6 @@ public sealed class SqlServerApiFixture : IAsyncLifetime
         await _factory.DisposeAsync();
     }
 
-    /// <summary>A client acting as <paramref name="userName"/> (percent-encoded, as the Angular client sends it).</summary>
     public HttpClient CreateClient(string? userName = DefaultUser)
     {
         var client = _factory.CreateClient();
@@ -78,17 +68,14 @@ public sealed class SqlServerApiFixture : IAsyncLifetime
         return client;
     }
 
-    /// <summary>A context on the test database, outside the app (for arranging and verifying).</summary>
     public AppDbContext CreateDbContext(params Microsoft.EntityFrameworkCore.Diagnostics.IInterceptor[] interceptors) =>
         new(new DbContextOptionsBuilder<AppDbContext>()
             .UseSqlServer(ConnectionString)
             .AddInterceptors(interceptors)
             .Options);
 
-    /// <summary>The app's own singleton cache, so tests that write behind the API can invalidate it.</summary>
     public IRequestSummaryCache SummaryCache => _factory.Services.GetRequiredService<IRequestSummaryCache>();
 
-    /// <summary>Empty tables and an empty summary cache: every test starts from the same state.</summary>
     public async Task ResetAsync()
     {
         await using var context = CreateDbContext();
@@ -96,7 +83,6 @@ public sealed class SqlServerApiFixture : IAsyncLifetime
         SummaryCache.Invalidate();
     }
 
-    /// <summary>Inserts requests directly; SQL Server assigns Id and RowVersion.</summary>
     public async Task<List<RequestEntity>> SeedAsync(params RequestEntity[] requests)
     {
         await using var context = CreateDbContext();

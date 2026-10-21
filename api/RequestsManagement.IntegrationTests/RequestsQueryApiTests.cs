@@ -7,7 +7,6 @@ using static RequestsManagement.IntegrationTests.SqlServerApiFixture;
 
 namespace RequestsManagement.IntegrationTests;
 
-/// <summary>T8.2: filtering, sorting and paging through HTTP, translated to real SQL.</summary>
 [Collection(SqlServerCollection.Name)]
 public sealed class RequestsQueryApiTests(SqlServerApiFixture fixture) : IAsyncLifetime
 {

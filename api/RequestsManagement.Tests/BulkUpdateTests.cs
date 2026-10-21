@@ -12,8 +12,6 @@ public class BulkUpdateTests
 {
     private static readonly string StaleRowVersion = Convert.ToBase64String(BitConverter.GetBytes(99L));
 
-    // --- Partial success -------------------------------------------------------
-
     [Fact]
     public async Task MixedOutcomes_EachRequestReportedInInputOrder_OnlyValidOneChanged()
     {
@@ -23,7 +21,7 @@ public class BulkUpdateTests
         BulkUpdateStatusResultDto result;
         await using (var context = CreateContext(dbName))
         {
-            result = await CreateService(context).BulkUpdateStatusAsync(new BulkUpdateStatusDto
+            result = await CreateStatusService(context).BulkUpdateStatusAsync(new BulkUpdateStatusDto
             {
                 Status = RequestStatus.InProgress,
                 Items =
@@ -70,7 +68,7 @@ public class BulkUpdateTests
         BulkUpdateStatusResultDto result;
         await using (var context = CreateContext(dbName))
         {
-            result = await CreateService(context).BulkUpdateStatusAsync(new BulkUpdateStatusDto
+            result = await CreateStatusService(context).BulkUpdateStatusAsync(new BulkUpdateStatusDto
             {
                 Status = RequestStatus.Completed,
                 Items = seeded.Select(s => new BulkUpdateStatusItemDto { Id = s.Id, RowVersion = s.RowVersion }).ToList()
@@ -89,7 +87,7 @@ public class BulkUpdateTests
         var (dbName, seeded) = await SeedAsync(RequestStatus.Waiting);
 
         await using var context = CreateContext(dbName);
-        var result = await CreateService(context).BulkUpdateStatusAsync(new BulkUpdateStatusDto
+        var result = await CreateStatusService(context).BulkUpdateStatusAsync(new BulkUpdateStatusDto
         {
             Status = RequestStatus.Waiting,
             Items = [new() { Id = seeded[0].Id, RowVersion = seeded[0].RowVersion }]
@@ -103,16 +101,14 @@ public class BulkUpdateTests
     [Fact]
     public async Task ConflictDetectedAtSave_DoesNotLeakIntoTheNextItem()
     {
-        // Item 1 passes the early check, but another user commits before our SaveChanges, so the
-        // database rejects it. Its rolled-back changes must not be retried by item 2's SaveChanges,
-        // otherwise item 2 would fail too.
+        // Item 1 is rejected by the database; its rolled-back changes must not be retried by item 2's SaveChanges.
         var (dbName, seeded) = await SeedAsync(RequestStatus.New, RequestStatus.New);
         var concurrentWriter = new ConcurrentWriterOnFirstSave(dbName, seeded[0].Id);
 
         BulkUpdateStatusResultDto result;
         await using (var context = CreateContext(dbName, concurrentWriter))
         {
-            result = await CreateService(context).BulkUpdateStatusAsync(new BulkUpdateStatusDto
+            result = await CreateStatusService(context).BulkUpdateStatusAsync(new BulkUpdateStatusDto
             {
                 Status = RequestStatus.InProgress,
                 Items = seeded.Select(s => new BulkUpdateStatusItemDto { Id = s.Id, RowVersion = s.RowVersion }).ToList()
@@ -124,10 +120,7 @@ public class BulkUpdateTests
         await using var verify = CreateContext(dbName);
         Assert.Equal(RequestStatus.Waiting, (await verify.Requests.SingleAsync(r => r.Id == seeded[0].Id)).Status); // the other user's change
         Assert.Equal(RequestStatus.InProgress, (await verify.Requests.SingleAsync(r => r.Id == seeded[1].Id)).Status);
-        // (Rollback of item 1's audit row relies on the SQL Server transaction; see WORK_PLAN T8.3.)
     }
-
-    // --- Request-level validation: 400, nothing updated ------------------------
 
     public static TheoryData<string, Func<SeededRequest[], BulkUpdateStatusDto>> InvalidRequests() => new()
     {
@@ -147,7 +140,7 @@ public class BulkUpdateTests
 
         await using (var context = CreateContext(dbName))
         {
-            await Assert.ThrowsAsync<ValidationException>(() => CreateService(context).BulkUpdateStatusAsync(build(seeded)));
+            await Assert.ThrowsAsync<ValidationException>(() => CreateStatusService(context).BulkUpdateStatusAsync(build(seeded)));
         }
 
         await AssertNothingChangedAsync(dbName);
@@ -160,14 +153,12 @@ public class BulkUpdateTests
 
         await using (var context = CreateContext(dbName))
         {
-            await Assert.ThrowsAsync<ValidationException>(() => CreateService(context, new MissingCurrentUser())
+            await Assert.ThrowsAsync<ValidationException>(() => CreateStatusService(context, new MissingCurrentUser())
                 .BulkUpdateStatusAsync(new BulkUpdateStatusDto { Status = RequestStatus.InProgress, Items = [Item(seeded[0])] }));
         }
 
         await AssertNothingChangedAsync(dbName);
     }
-
-    // --- Single update: same "missing status" fix as the bulk DTO --------------
 
     [Fact]
     public async Task SingleUpdate_MissingStatus_ThrowsValidation_RatherThanDefaultingToNew()
@@ -175,12 +166,10 @@ public class BulkUpdateTests
         var (dbName, seeded) = await SeedAsync(RequestStatus.InProgress);
 
         await using var context = CreateContext(dbName);
-        var ex = await Assert.ThrowsAsync<ValidationException>(() => CreateService(context)
+        var ex = await Assert.ThrowsAsync<ValidationException>(() => CreateStatusService(context)
             .UpdateStatusAsync(seeded[0].Id, new UpdateRequestStatusDto { Status = null, RowVersion = seeded[0].RowVersion }));
         Assert.Equal("יש לציין סטטוס.", ex.Message);
     }
-
-    // --- Helpers -----------------------------------------------------------------
 
     public record SeededRequest(int Id, string RowVersion);
 

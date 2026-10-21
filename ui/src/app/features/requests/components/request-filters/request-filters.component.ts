@@ -24,12 +24,8 @@ export interface RequestFilters {
   priority: RequestPriority | null;
   organizationName: string | null;
   assignedTo: string | null;
-  /** First included creation day, `YYYY-MM-DD`. */
   createdFrom: string | null;
-  /**
-   * Day *after* the last included creation day, `YYYY-MM-DD`: the user picks an inclusive end date,
-   * the API's range is half-open (`createdFrom <= CreatedAt < createdTo`).
-   */
+  /** The day after the last included day: the API range is half-open. */
   createdTo: string | null;
 }
 
@@ -51,7 +47,6 @@ const SEARCH_DEBOUNCE_MS = 300;
   styleUrl: './request-filters.component.scss',
 })
 export class RequestFiltersComponent {
-  /** Choices for the exact-match filters, loaded by the page from the API. */
   readonly organizations = input<readonly string[]>([]);
   readonly assignees = input<readonly string[]>([]);
 
@@ -77,8 +72,7 @@ export class RequestFiltersComponent {
   constructor() {
     const controls = this.form.controls;
 
-    // Only free text is debounced; selections apply at once (switchMap in the page cancels any
-    // request they supersede).
+    // Only free text is debounced; selections apply at once.
     const search$ = controls.search.valueChanges.pipe(debounceTime(SEARCH_DEBOUNCE_MS), distinctUntilChanged());
     const created$ = controls.created.valueChanges.pipe(
       map(() => this.dateRange()),

@@ -69,7 +69,6 @@ export class RequestsTableComponent {
   readonly sortBy = input.required<RequestSortField>();
   readonly sortDirection = input.required<'asc' | 'desc'>();
   readonly updatingIds = input<ReadonlySet<number>>(new Set());
-  /** Rows selected for a bulk update (owned by the page). */
   readonly selectedIds = input<ReadonlySet<number>>(new Set());
 
   readonly sortChange = output<Sort>();
@@ -77,7 +76,6 @@ export class RequestsTableComponent {
   readonly statusChange = output<RequestStatusChangeEvent>();
   readonly historyRequested = output<RequestRecord>();
   readonly rowSelectionToggle = output<RequestRecord>();
-  /** Header checkbox: true selects every row on this page, false clears the selection. */
   readonly allSelectionToggle = output<boolean>();
 
   private readonly selectedOnPage = computed(

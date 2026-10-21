@@ -11,7 +11,6 @@ import { RequestStatusHistoryEntry } from './models/request-history.model';
 import { RequestFilterOptions } from './models/request-filter-options.model';
 import { BulkUpdateStatus, BulkUpdateStatusResult } from './models/bulk-update-status.model';
 
-/** Optional filters forwarded as query parameters only when set. */
 const OPTIONAL_QUERY_PARAMS = [
   'search',
   'status',

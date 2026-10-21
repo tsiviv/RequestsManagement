@@ -6,10 +6,6 @@ using static RequestsManagement.IntegrationTests.SqlServerApiFixture;
 
 namespace RequestsManagement.IntegrationTests;
 
-/// <summary>
-/// T8.6: every status change is audited and readable through the history endpoint.
-/// T8.7: the cached summary is fresh right after a change, through the real app's singleton cache.
-/// </summary>
 [Collection(SqlServerCollection.Name)]
 public sealed class HistoryAndCacheApiTests(SqlServerApiFixture fixture) : IAsyncLifetime
 {

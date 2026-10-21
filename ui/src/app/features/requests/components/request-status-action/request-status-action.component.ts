@@ -14,7 +14,6 @@ import { REQUEST_STATUS_LABELS, RequestStatus } from '../../models/request.model
 })
 export class RequestStatusActionComponent {
   readonly status = input.required<RequestStatus>();
-  /** Valid next statuses as decided by the server (RequestDto.allowedNextStatuses); empty for a final status. */
   readonly allowedStatuses = input.required<readonly RequestStatus[]>();
   readonly requestTitle = input.required<string>();
   readonly pending = input(false);
@@ -23,7 +22,6 @@ export class RequestStatusActionComponent {
   protected readonly statusLabels = REQUEST_STATUS_LABELS;
   protected readonly control = new FormControl<RequestStatus>('New', { nonNullable: true });
 
-  /** The current status (shown as selected) followed by the statuses it may move to. */
   protected readonly options = computed(() => [this.status(), ...this.allowedStatuses()]);
   protected readonly isFinal = computed(() => this.allowedStatuses().length === 0);
 
@@ -47,9 +45,7 @@ export class RequestStatusActionComponent {
     this.control.valueChanges.pipe(takeUntilDestroyed()).subscribe((value) => {
       if (value !== this.status()) {
         this.statusChange.emit(value);
-        // The select shows the request's actual status, not the requested one: it only changes
-        // when the parent passes in the updated status after a successful save. Otherwise a
-        // rejected or blocked update would leave the select showing a status that was never saved.
+        // Shows the saved status, not the requested one, so a rejected update does not leave a wrong value.
         this.control.setValue(this.status(), { emitEvent: false });
       }
     });

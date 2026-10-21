@@ -41,40 +41,26 @@ public class RequestConfiguration : IEntityTypeConfiguration<RequestEntity>
         builder.Property(r => r.RowVersion)
             .IsRowVersion();
 
-        // Every sortable order (RequestService.ApplySort) matches one of these keys exactly; a
-        // non-clustered key implicitly ends with the clustered Id, which is the order's tiebreaker.
+        // Equality filter first, then CreatedAt (range and sort). Non-clustered keys end with Id,
+        // so every sort order (RequestQueryService.ApplySort) is read in index order without a Sort.
 
-        // Supports "filter by status, newest first" (seek on Status, CreatedAt already in order)
-        // and the "requests by status" aggregation. Status is filtered on, not sorted by.
         builder.HasIndex(r => new { r.Status, r.CreatedAt })
             .HasDatabaseName("IX_Requests_Status_CreatedAt");
 
-        // Same for priority: filter + newest first, the "requests by priority" aggregation, and
-        // sorting by priority (Priority, CreatedAt, Id is exactly this key, read in either direction).
         builder.HasIndex(r => new { r.Priority, r.CreatedAt })
             .HasDatabaseName("IX_Requests_Priority_CreatedAt");
 
-        // Supports "a handler's queue, newest first" and handler + date-range filters: equality seek
-        // on AssignedTo, then CreatedAt is both the range predicate and the sort.
         builder.HasIndex(r => new { r.AssignedTo, r.CreatedAt })
             .HasDatabaseName("IX_Requests_AssignedTo_CreatedAt");
 
-        // Same shape for the exact OrganizationName filter and sorting by organization. Free-text
-        // search (LIKE '%term%') cannot seek on this index; see docs for that trade-off.
         builder.HasIndex(r => new { r.OrganizationName, r.CreatedAt })
             .HasDatabaseName("IX_Requests_OrganizationName_CreatedAt");
 
-        // Supports the unfiltered default listing (newest first), CreatedAt range filters and
-        // date-based aggregation.
         builder.HasIndex(r => r.CreatedAt)
             .HasDatabaseName("IX_Requests_CreatedAt");
 
-        // Supports sorting by last update ("not touched recently" / "just changed"). Without it,
-        // that sort would be a Sort over the whole table on every page.
         builder.HasIndex(r => r.UpdatedAt)
             .HasDatabaseName("IX_Requests_UpdatedAt");
 
-        // Sorting by Id reads the clustered index (PK) in order. Title is not sortable: it would
-        // need its own index for a free-text column whose order means little to users.
     }
 }

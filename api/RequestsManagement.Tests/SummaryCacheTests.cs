@@ -18,14 +18,14 @@ public class SummaryCacheTests
 
         await using (var first = CreateContext(dbName))
         {
-            Assert.Equal(2, (await CreateService(first, summaryCache: cache).GetSummaryAsync()).Total);
+            Assert.Equal(2, (await CreateQueryService(first, summaryCache: cache).GetSummaryAsync()).Total);
         }
 
         // A row added behind the service's back (no invalidation): a cached answer still says 2.
         await AddRequestAsync(dbName);
 
         await using var second = CreateContext(dbName);
-        Assert.Equal(2, (await CreateService(second, summaryCache: cache).GetSummaryAsync()).Total);
+        Assert.Equal(2, (await CreateQueryService(second, summaryCache: cache).GetSummaryAsync()).Total);
     }
 
     [Fact]
@@ -37,20 +37,20 @@ public class SummaryCacheTests
 
         await using (var context = CreateContext(dbName))
         {
-            await CreateService(context, summaryCache: cache).GetSummaryAsync();
+            await CreateQueryService(context, summaryCache: cache).GetSummaryAsync();
         }
         await AddRequestAsync(dbName);
 
         clock.Advance(MemoryRequestSummaryCache.Expiration - TimeSpan.FromSeconds(1));
         await using (var context = CreateContext(dbName))
         {
-            Assert.Equal(2, (await CreateService(context, summaryCache: cache).GetSummaryAsync()).Total);
+            Assert.Equal(2, (await CreateQueryService(context, summaryCache: cache).GetSummaryAsync()).Total);
         }
 
         clock.Advance(TimeSpan.FromSeconds(2));
         await using (var context = CreateContext(dbName))
         {
-            Assert.Equal(3, (await CreateService(context, summaryCache: cache).GetSummaryAsync()).Total);
+            Assert.Equal(3, (await CreateQueryService(context, summaryCache: cache).GetSummaryAsync()).Total);
         }
     }
 
@@ -76,8 +76,6 @@ public class SummaryCacheTests
         Assert.Equal(2, calls);
     }
 
-    // --- List count reuses the summary total --------------------------------------
-
     [Fact]
     public async Task UnfilteredList_TakesItsTotalFromTheCachedSummary_FilteredListCountsExactly()
     {
@@ -85,19 +83,17 @@ public class SummaryCacheTests
         var cache = CreateSummaryCache();
         await using (var context = CreateContext(dbName))
         {
-            await CreateService(context, summaryCache: cache).GetSummaryAsync();
+            await CreateQueryService(context, summaryCache: cache).GetSummaryAsync();
         }
 
         // A row added behind the cache's back: only a real COUNT would see it.
         await AddRequestAsync(dbName);
 
         await using var read = CreateContext(dbName);
-        var service = CreateService(read, summaryCache: cache);
+        var service = CreateQueryService(read, summaryCache: cache);
         Assert.Equal(3, (await service.GetRequestsAsync(new RequestQueryDto())).TotalCount);
         Assert.Equal(4, (await service.GetRequestsAsync(new RequestQueryDto { Status = RequestStatus.New })).TotalCount);
     }
-
-    // --- Invalidation ------------------------------------------------------------
 
     [Fact]
     public async Task SingleUpdate_InvalidatesSummary_SoTheNextReadIsFresh()
@@ -108,7 +104,7 @@ public class SummaryCacheTests
 
         await using (var context = CreateContext(dbName))
         {
-            await CreateService(context, summaryCache: cache).UpdateStatusAsync(id,
+            await CreateStatusService(context, summaryCache: cache).UpdateStatusAsync(id,
                 new UpdateRequestStatusDto { Status = RequestStatus.InProgress, RowVersion = rowVersion });
         }
 
@@ -126,7 +122,7 @@ public class SummaryCacheTests
 
         await using (var context = CreateContext(dbName))
         {
-            await CreateService(context, summaryCache: cache).BulkUpdateStatusAsync(new BulkUpdateStatusDto
+            await CreateStatusService(context, summaryCache: cache).BulkUpdateStatusAsync(new BulkUpdateStatusDto
             {
                 Status = RequestStatus.InProgress,
                 Items = [new() { Id = id, RowVersion = rowVersion }, new() { Id = 999, RowVersion = rowVersion }]
@@ -149,7 +145,7 @@ public class SummaryCacheTests
 
         await using (var context = CreateContext(dbName))
         {
-            var service = CreateService(context, summaryCache: cache);
+            var service = CreateStatusService(context, summaryCache: cache);
             await Assert.ThrowsAsync<RequestsManagement.Exceptions.ConcurrencyConflictException>(() =>
                 service.UpdateStatusAsync(id, new UpdateRequestStatusDto { Status = RequestStatus.InProgress, RowVersion = stale }));
             var bulk = await service.BulkUpdateStatusAsync(new BulkUpdateStatusDto
@@ -192,7 +188,7 @@ public class SummaryCacheTests
     private static async Task<RequestSummaryDto> GetSummaryAsync(string dbName, IRequestSummaryCache cache)
     {
         await using var context = CreateContext(dbName);
-        return await CreateService(context, summaryCache: cache).GetSummaryAsync();
+        return await CreateQueryService(context, summaryCache: cache).GetSummaryAsync();
     }
 
     private static async Task<(string DbName, int Id, string RowVersion)> SeedOneAsync(RequestStatus status)

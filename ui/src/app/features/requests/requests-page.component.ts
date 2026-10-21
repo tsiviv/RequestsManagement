@@ -73,16 +73,13 @@ export class RequestsPageComponent {
 
   private readonly _updatingIds = signal<ReadonlySet<number>>(new Set());
 
-  // Bulk update. Selection is per page: it is cleared whenever the page shows new data, so it
-  // never holds rowVersions of rows that are no longer on screen (a page holds at most 100 rows,
-  // the server's bulk limit).
+  // Selection is cleared whenever the page shows new data, so it never holds stale rowVersions.
   private readonly _selectedIds = signal<ReadonlySet<number>>(new Set());
   private readonly _bulkPending = signal(false);
   private readonly _bulkResult = signal<{ result: BulkUpdateStatusResult; titles: ReadonlyMap<number, string> } | null>(
     null,
   );
 
-  /** Read-only view of state for the template and tests; all writes go through the private signals above. */
   protected readonly query = this._query.asReadonly();
   readonly pagedResult = this._pagedResult.asReadonly();
   readonly loading = this._loading.asReadonly();
@@ -99,7 +96,6 @@ export class RequestsPageComponent {
     (this._pagedResult()?.items ?? []).filter((row) => this._selectedIds().has(row.id)),
   );
 
-  /** Statuses at least one selected request may move to, in the usual status order. */
   protected readonly bulkTargetStatuses = computed(() => {
     const allowed = new Set(this.selectedRows().flatMap((row) => row.allowedNextStatuses));
     return REQUEST_STATUSES.filter((status) => allowed.has(status));
@@ -115,10 +111,7 @@ export class RequestsPageComponent {
     );
   });
 
-  /**
-   * Choices for the organization / handler filters, loaded once. If this fails the page still works:
-   * those two lists are just empty (only "all"), every other filter is unaffected.
-   */
+  // If this fails the page still works; only these two lists stay empty.
   protected readonly filterOptions = toSignal(
     this.requestsService.getFilterOptions().pipe(catchError(() => of(EMPTY_FILTER_OPTIONS))),
     { initialValue: EMPTY_FILTER_OPTIONS },
@@ -246,8 +239,7 @@ export class RequestsPageComponent {
       error: (apiError: ApiError) => {
         this.setUpdating(row.id, false);
         this.snackBar.open(updateErrorMessage(apiError), 'סגור', { duration: 8000 });
-        // Conflict / not found / rejected transition all mean the row on screen no longer matches
-        // the server (status, rowVersion or allowed next statuses), so fetch the current page again.
+        // The row on screen no longer matches the server: fetch the current page again.
         if (apiError.kind === 'conflict' || apiError.kind === 'not-found' || apiError.kind === 'validation') {
           this.reloadRequests();
         }
@@ -295,8 +287,8 @@ export class RequestsPageComponent {
           this._bulkPending.set(false);
           this._bulkResult.set({ result, titles });
           this.replaceRows(result.results.flatMap((r) => (r.request ? [r.request] : [])));
-          // Failed rows stay selected so the user can see them and retry (e.g. a different status).
-          this._selectedIds.set(new Set(result.results.filter((r) => r.outcome !== 'Updated').map((r) => r.id)));
+          // Failures are listed in the result panel; leaving them selected would invite a blind retry.
+          this._selectedIds.set(new Set());
 
           if (result.updated > 0) {
             this.reloadSummary();
@@ -307,14 +299,12 @@ export class RequestsPageComponent {
           }
         },
         error: (apiError: ApiError) => {
-          // Request-level rejection (400): nothing was updated.
           this._bulkPending.set(false);
           this.snackBar.open(updateErrorMessage(apiError), 'סגור', { duration: 8000 });
         },
       });
   }
 
-  /** The server rejects changes without a name (400); say why up front instead of a generic error. */
   private ensureUserName(): boolean {
     if (this.currentUser.hasUserName()) {
       return true;
@@ -325,7 +315,6 @@ export class RequestsPageComponent {
     return false;
   }
 
-  /** Puts the server's updated versions (new status, rowVersion, allowed next statuses) in place. */
   private replaceRows(updated: readonly RequestRecord[]): void {
     if (updated.length === 0) {
       return;
@@ -349,7 +338,6 @@ export class RequestsPageComponent {
   }
 }
 
-/** A rejected update (400) explains why, using the server's reason; other kinds keep their message. */
 function updateErrorMessage(error: ApiError): string {
   if (error.kind === 'validation') {
     return error.detail ? `לא ניתן לעדכן את הסטטוס: ${error.detail}` : 'לא ניתן לעדכן את הסטטוס.';

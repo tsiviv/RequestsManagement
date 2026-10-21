@@ -21,22 +21,24 @@ internal static class TestData
 
     public const string TestUser = "test-user";
 
-    // A fresh cache per service by default, so tests never see each other's cached summary;
-    // cache tests pass a shared one to exercise hits across "requests".
-    public static RequestService CreateService(
+    // A fresh cache by default, so tests never see each other's cached summary; cache tests pass a
+    // shared one to exercise hits across "requests".
+    public static RequestQueryService CreateQueryService(AppDbContext context, IRequestSummaryCache? summaryCache = null) =>
+        new(context, summaryCache ?? CreateSummaryCache());
+
+    public static RequestStatusService CreateStatusService(
         AppDbContext context,
         ICurrentUser? currentUser = null,
-        ILogger<RequestService>? logger = null,
+        ILogger<RequestStatusService>? logger = null,
         IRequestSummaryCache? summaryCache = null) =>
         new(context,
             currentUser ?? new StubCurrentUser(TestUser),
             summaryCache ?? CreateSummaryCache(),
-            logger ?? NullLogger<RequestService>.Instance);
+            logger ?? NullLogger<RequestStatusService>.Instance);
 
     public static MemoryRequestSummaryCache CreateSummaryCache(IMemoryCache? memoryCache = null) =>
         new(memoryCache ?? new MemoryCache(new MemoryCacheOptions()), NullLogger<MemoryRequestSummaryCache>.Instance);
 
-    // Records log entries (level, rendered message, structured values) so tests can assert on them.
     public sealed class ListLogger<T> : ILogger<T>
     {
         public List<(LogLevel Level, string Message, IReadOnlyDictionary<string, object?> Values)> Entries { get; } = [];
@@ -54,7 +56,6 @@ internal static class TestData
         }
     }
 
-    // Header parsing is tested separately (HeaderCurrentUserTests); service tests only need a user.
     public sealed class StubCurrentUser(string userName) : ICurrentUser
     {
         public string UserName => userName;

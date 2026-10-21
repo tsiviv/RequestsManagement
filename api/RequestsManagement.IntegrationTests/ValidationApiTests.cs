@@ -7,10 +7,6 @@ using static RequestsManagement.IntegrationTests.SqlServerApiFixture;
 
 namespace RequestsManagement.IntegrationTests;
 
-/// <summary>
-/// T8.4: invalid input is rejected through the real pipeline (model binding, [ApiController]
-/// validation, the exception middleware) with 400 ProblemDetails, and changes nothing.
-/// </summary>
 [Collection(SqlServerCollection.Name)]
 public sealed class ValidationApiTests(SqlServerApiFixture fixture) : IAsyncLifetime
 {

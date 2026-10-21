@@ -11,8 +11,7 @@ public static class RequestSeeder
     private const int RecordCount = 100_000;
     private const int BatchSize = 2_000;
 
-    // Fixed anchor instead of DateTime.UtcNow so seed output is fully
-    // reproducible regardless of which day the seed actually runs.
+    // Fixed date (not UtcNow) so the data set is identical on every run.
     private static readonly DateTime AnchorDate = new(2026, 8, 24, 0, 0, 0, DateTimeKind.Utc);
 
     private static readonly string[] RequestTypes =
@@ -42,8 +41,7 @@ public static class RequestSeeder
         "אל על נתיבי אוויר לישראל", "פרטנר תקשורת", "סלקום ישראל"
     ];
 
-    // Combined with OrganizationNames to give ~200 distinct organizations, so filtering
-    // by organization is selective enough to reflect real index behavior at 100K rows.
+    // × branches ≈ 200 organizations, so an organization filter is selective.
     private static readonly string[] Branches =
     [
         "מטה", "סניף צפון", "סניף דרום", "סניף מרכז", "סניף ירושלים",
@@ -57,8 +55,6 @@ public static class RequestSeeder
         "הילה דהן", "גיל אוחיון", "ליאת ברק", "אלון חדד", "מאיה נחום"
     ];
 
-    // Skewed like a real queue: most requests end up Completed and few are High priority,
-    // which also makes "open"/"high priority" filters selective rather than ~25% of the table.
     private static readonly RequestStatus[] Statuses =
         [RequestStatus.New, RequestStatus.InProgress, RequestStatus.Waiting, RequestStatus.Completed];
     private static readonly float[] StatusWeights = [0.15f, 0.20f, 0.10f, 0.55f];
@@ -67,11 +63,7 @@ public static class RequestSeeder
         [RequestPriority.Low, RequestPriority.Medium, RequestPriority.High];
     private static readonly float[] PriorityWeights = [0.40f, 0.40f, 0.20f];
 
-    /// <summary>
-    /// Seeds the test data set when the table is empty. With <paramref name="reset"/>, existing
-    /// requests (and, via cascade, their history) are deleted first so the data set is recreated.
-    /// Runs in one transaction so a failure never leaves a partially seeded table behind.
-    /// </summary>
+    // Seeds when empty; with reset, recreates the data set. One transaction: never half-seeded.
     public static async Task SeedAsync(AppDbContext context, ILogger logger, bool reset = false, CancellationToken cancellationToken = default)
     {
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
@@ -81,8 +73,7 @@ public static class RequestSeeder
             var deleted = await context.Requests.ExecuteDeleteAsync(cancellationToken);
             if (deleted > 0)
             {
-                // Restart Ids at 1 so a recreated data set has the same Ids as a fresh one.
-                // Only after a delete: on a never-used table RESEED 0 would make the next Id 0.
+                // Same Ids as a fresh data set. Only after a delete: on an unused table RESEED 0 starts at 0.
                 await context.Database.ExecuteSqlRawAsync("DBCC CHECKIDENT ('Requests', RESEED, 0);", cancellationToken);
             }
             logger.LogWarning("Reseed requested: deleted {Count} existing requests", deleted);
@@ -104,7 +95,6 @@ public static class RequestSeeder
             .RuleFor(r => r.CreatedAt, f => f.Date.Between(AnchorDate.AddMonths(-18), AnchorDate))
             .RuleFor(r => r.UpdatedAt, (f, r) => f.Date.Between(r.CreatedAt, AnchorDate));
 
-        // Inserts are append-only, so change detection on every Add is wasted work.
         context.ChangeTracker.AutoDetectChangesEnabled = false;
         try
         {

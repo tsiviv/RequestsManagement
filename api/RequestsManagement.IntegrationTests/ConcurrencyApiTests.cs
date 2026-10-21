@@ -12,11 +12,6 @@ using static RequestsManagement.IntegrationTests.SqlServerApiFixture;
 
 namespace RequestsManagement.IntegrationTests;
 
-/// <summary>
-/// T8.3: optimistic concurrency enforced by SQL Server's rowversion, not by the client or the
-/// InMemory provider: exactly one of several concurrent updates wins, the rest get 409, and a
-/// conflict detected by the database rolls back the audit row with the update.
-/// </summary>
 [Collection(SqlServerCollection.Name)]
 public sealed class ConcurrencyApiTests(SqlServerApiFixture fixture) : IAsyncLifetime
 {
@@ -77,7 +72,6 @@ public sealed class ConcurrencyApiTests(SqlServerApiFixture fixture) : IAsyncLif
         Assert.Single(results, r => r.StatusCode == HttpStatusCode.OK);
         Assert.Equal(contenders - 1, results.Count(r => r.StatusCode == HttpStatusCode.Conflict));
 
-        // Exactly one change was recorded, by the winner, and the row reflects it.
         await using var db = fixture.CreateDbContext();
         var history = Assert.Single(await db.RequestStatusHistory.Where(h => h.RequestId == request.Id).ToListAsync());
         Assert.Equal(results.Single(r => r.StatusCode == HttpStatusCode.OK).User, history.ChangedBy);
@@ -87,16 +81,14 @@ public sealed class ConcurrencyApiTests(SqlServerApiFixture fixture) : IAsyncLif
     [Fact]
     public async Task ConflictDetectedOnlyAtSave_RollsBackTheAuditRowWithTheUpdate()
     {
-        // Moved here from the unit tests (T3.3): it depends on the SaveChanges transaction, which
-        // InMemory does not have. Another user commits between our load and our SaveChanges, so
-        // the early check passes but the database rejects the UPDATE; the history INSERT in the
-        // same transaction must not survive.
+        // Another user commits between our load and our SaveChanges: the early check passes, the
+        // database rejects the UPDATE, and the history INSERT in the same transaction must not survive.
         var request = (await fixture.SeedAsync(Request("r", RequestStatus.InProgress)))[0];
         var concurrentWriter = new ConcurrentWriterOnFirstSave(fixture, request.Id);
 
         await using (var context = fixture.CreateDbContext(concurrentWriter))
         {
-            var service = new RequestService(context, new FixedUser("late-user"), fixture.SummaryCache, NullLogger<RequestService>.Instance);
+            var service = new RequestStatusService(context, new FixedUser("late-user"), fixture.SummaryCache, NullLogger<RequestStatusService>.Instance);
             await Assert.ThrowsAsync<ConcurrencyConflictException>(() => service.UpdateStatusAsync(request.Id,
                 new UpdateRequestStatusDto { Status = RequestStatus.Completed, RowVersion = Convert.ToBase64String(request.RowVersion) }));
         }

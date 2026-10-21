@@ -58,7 +58,7 @@
     </ng-container>
 
     <ng-container matColumnDef="priority">
-      <!-- First click shows the most urgent first: that is why anyone sorts by priority. -->
+      <!-- First click: most urgent first. -->
       <th mat-header-cell *matHeaderCellDef mat-sort-header start="desc" scope="col">עדיפות</th>
       <td mat-cell *matCellDef="let row">
         <span class="badge" [class]="priorityBadgeClass(row)">
@@ -91,13 +91,14 @@
           />
           <button
             type="button"
-            mat-icon-button
+            mat-stroked-button
             class="row-actions__history"
             [attr.aria-label]="'היסטוריית שינויים עבור ' + row.title"
-            matTooltip="היסטוריית שינויים"
+            matTooltip="היסטוריית שינויי הסטטוס"
             (click)="historyRequested.emit(row)"
           >
             <mat-icon>history</mat-icon>
+            היסטוריה
           </button>
         </div>
       </td>

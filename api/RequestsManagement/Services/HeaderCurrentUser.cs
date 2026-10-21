@@ -3,15 +3,8 @@ using RequestsManagement.Models;
 
 namespace RequestsManagement.Services;
 
-/// <summary>
-/// Reads the acting user from the X-User-Name header. There is no authentication in this
-/// system, so the header is trusted as-is; with real auth this would read the token's claims.
-/// </summary>
-/// <remarks>
-/// HTTP header values cannot carry non-Latin-1 text (browsers refuse to send it, Kestrel rejects it),
-/// so the value is percent-encoded UTF-8 (encodeURIComponent on the client). Plain ASCII names
-/// are unaffected by decoding.
-/// </remarks>
+// Header values cannot carry Hebrew (browsers refuse it, Kestrel rejects it), so the name is
+// percent-encoded UTF-8 (encodeURIComponent on the client).
 public sealed class HeaderCurrentUser(IHttpContextAccessor httpContextAccessor) : ICurrentUser
 {
     public const string HeaderName = "X-User-Name";

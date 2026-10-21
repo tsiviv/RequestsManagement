@@ -7,7 +7,6 @@ using static RequestsManagement.IntegrationTests.SqlServerApiFixture;
 
 namespace RequestsManagement.IntegrationTests;
 
-/// <summary>T8.5: partial success through HTTP and SQL Server, each request in its own transaction.</summary>
 [Collection(SqlServerCollection.Name)]
 public sealed class BulkApiTests(SqlServerApiFixture fixture) : IAsyncLifetime
 {
@@ -44,7 +43,6 @@ public sealed class BulkApiTests(SqlServerApiFixture fixture) : IAsyncLifetime
             [BulkUpdateOutcome.Updated, BulkUpdateOutcome.InvalidTransition, BulkUpdateOutcome.NotFound, BulkUpdateOutcome.Conflict, BulkUpdateOutcome.Updated],
             result.Results.Select(r => r.Outcome));
 
-        // Updated items carry the server's new rowVersion, usable for a follow-up change.
         var updated = result.Results.Where(r => r.Outcome == BulkUpdateOutcome.Updated).Select(r => r.Request!).ToList();
         Assert.All(updated, r => Assert.Equal(RequestStatus.Completed, r.Status));
 

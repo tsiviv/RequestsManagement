@@ -26,10 +26,7 @@ function toApiError(error: HttpErrorResponse): ApiError {
   return { kind, message: defaultMessage(kind), status: error.status, ...(detail ? { detail } : {}) };
 }
 
-/**
- * The server answers errors with ProblemDetails: app errors carry `detail`, model validation
- * carries `errors: { field: [messages] }`. Anything else (plain text, HTML from a proxy) is ignored.
- */
+// ProblemDetails: app errors carry `detail`, model validation carries `errors: { field: [messages] }`.
 function problemDetail(body: unknown): string | undefined {
   if (!body || typeof body !== 'object') {
     return undefined;

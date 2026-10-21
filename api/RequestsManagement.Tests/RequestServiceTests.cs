@@ -10,8 +10,6 @@ namespace RequestsManagement.Tests;
 
 public class RequestServiceTests
 {
-    // --- Query behavior ---------------------------------------------------
-
     [Fact]
     public async Task GetRequestsAsync_FiltersByStatus_AndSortsAscending()
     {
@@ -28,7 +26,7 @@ public class RequestServiceTests
         }
 
         await using var context = CreateContext(dbName);
-        var service = CreateService(context);
+        var service = CreateQueryService(context);
 
         var result = await service.GetRequestsAsync(new RequestQueryDto
         {
@@ -62,7 +60,7 @@ public class RequestServiceTests
         }
 
         await using var context = CreateContext(dbName);
-        var service = CreateService(context);
+        var service = CreateQueryService(context);
 
         var result = await service.GetRequestsAsync(new RequestQueryDto
         {
@@ -90,7 +88,7 @@ public class RequestServiceTests
         }
 
         await using var context = CreateContext(dbName);
-        var service = CreateService(context);
+        var service = CreateQueryService(context);
 
         var result = await service.GetRequestsAsync(new RequestQueryDto
         {
@@ -125,7 +123,7 @@ public class RequestServiceTests
         }
 
         await using var context = CreateContext(dbName);
-        var service = CreateService(context);
+        var service = CreateQueryService(context);
 
         var result = await service.GetRequestsAsync(new RequestQueryDto
         {
@@ -148,7 +146,7 @@ public class RequestServiceTests
     public async Task GetRequestsAsync_WithCreatedFromNotBeforeCreatedTo_ThrowsValidationException(int daysFromToFrom)
     {
         await using var context = CreateContext(Guid.NewGuid().ToString());
-        var service = CreateService(context);
+        var service = CreateQueryService(context);
         var from = new DateTime(2026, 7, 1, 0, 0, 0, DateTimeKind.Utc);
 
         await Assert.ThrowsAsync<ValidationException>(() =>
@@ -172,7 +170,7 @@ public class RequestServiceTests
         }
 
         await using var context = CreateContext(dbName);
-        var service = CreateService(context);
+        var service = CreateQueryService(context);
 
         var pages = new List<int>();
         for (var page = 1; page <= 3; page++)
@@ -187,7 +185,6 @@ public class RequestServiceTests
             pages.AddRange(result.Items.Select(i => i.Id));
         }
 
-        // Every row appears exactly once across pages, in descending Id order.
         Assert.Equal(6, pages.Distinct().Count());
         Assert.Equal(pages.OrderByDescending(id => id), pages);
     }
@@ -211,7 +208,7 @@ public class RequestServiceTests
         }
 
         await using var context = CreateContext(dbName);
-        var result = await CreateService(context).GetRequestsAsync(new RequestQueryDto { SortBy = "organizationName", SortDirection = direction });
+        var result = await CreateQueryService(context).GetRequestsAsync(new RequestQueryDto { SortBy = "organizationName", SortDirection = direction });
 
         Assert.Equal(expectedTitles, result.Items.Select(i => i.Title));
     }
@@ -238,7 +235,7 @@ public class RequestServiceTests
         }
 
         await using var context = CreateContext(dbName);
-        var result = await CreateService(context).GetRequestsAsync(new RequestQueryDto { SortBy = "priority", SortDirection = direction });
+        var result = await CreateQueryService(context).GetRequestsAsync(new RequestQueryDto { SortBy = "priority", SortDirection = direction });
 
         Assert.Equal(expectedTitles, result.Items.Select(i => i.Title));
     }
@@ -259,7 +256,7 @@ public class RequestServiceTests
         }
 
         await using var context = CreateContext(dbName);
-        var service = CreateService(context);
+        var service = CreateQueryService(context);
 
         var ids = new List<int>();
         for (var page = 1; page <= 3; page++)
@@ -289,7 +286,7 @@ public class RequestServiceTests
         }
 
         await using var context = CreateContext(dbName);
-        var ids = (await CreateService(context).GetRequestsAsync(new RequestQueryDto { SortBy = "id", SortDirection = direction }))
+        var ids = (await CreateQueryService(context).GetRequestsAsync(new RequestQueryDto { SortBy = "id", SortDirection = direction }))
             .Items.Select(i => i.Id).ToList();
 
         Assert.Equal(direction == "asc" ? ids.Order() : ids.OrderDescending(), ids);
@@ -303,7 +300,7 @@ public class RequestServiceTests
     {
         await using var context = CreateContext(Guid.NewGuid().ToString());
         var ex = await Assert.ThrowsAsync<ValidationException>(() =>
-            CreateService(context).GetRequestsAsync(new RequestQueryDto { SortBy = sortBy }));
+            CreateQueryService(context).GetRequestsAsync(new RequestQueryDto { SortBy = sortBy }));
         Assert.Contains("createdat, updatedat, organizationname, priority, id", ex.Message);
     }
 
@@ -322,7 +319,7 @@ public class RequestServiceTests
         }
 
         await using var context = CreateContext(dbName);
-        var options = await CreateService(context).GetFilterOptionsAsync();
+        var options = await CreateQueryService(context).GetFilterOptionsAsync();
 
         Assert.Equal(["Org A", "Org B"], options.Organizations);
         Assert.Equal(["Dana", "Yossi"], options.Assignees);
@@ -332,7 +329,7 @@ public class RequestServiceTests
     public async Task GetRequestsAsync_WithInvalidSortField_ThrowsValidationException()
     {
         await using var context = CreateContext(Guid.NewGuid().ToString());
-        var service = CreateService(context);
+        var service = CreateQueryService(context);
 
         await Assert.ThrowsAsync<ValidationException>(() =>
             service.GetRequestsAsync(new RequestQueryDto { SortBy = "'; DROP TABLE Requests;--" }));
@@ -354,7 +351,7 @@ public class RequestServiceTests
         }
 
         await using var context = CreateContext(dbName);
-        var service = CreateService(context);
+        var service = CreateQueryService(context);
 
         var summary = await service.GetSummaryAsync();
 
@@ -364,16 +361,12 @@ public class RequestServiceTests
         Assert.Equal(2, summary.ByPriority[nameof(RequestPriority.High)]);
         Assert.Equal(1, summary.ByPriority[nameof(RequestPriority.Low)]);
 
-        // Statuses/priorities with zero matching requests must still be present (as 0),
-        // since the frontend's RequestSummary type is a complete map over every enum value.
         Assert.Equal(0, summary.ByStatus[nameof(RequestStatus.InProgress)]);
         Assert.Equal(0, summary.ByStatus[nameof(RequestStatus.Waiting)]);
         Assert.Equal(0, summary.ByPriority[nameof(RequestPriority.Medium)]);
         Assert.Equal(Enum.GetValues<RequestStatus>().Length, summary.ByStatus.Count);
         Assert.Equal(Enum.GetValues<RequestPriority>().Length, summary.ByPriority.Count);
     }
-
-    // --- Status update behavior --------------------------------------------
 
     [Fact]
     public async Task UpdateStatusAsync_WithCurrentRowVersion_UpdatesStatus()
@@ -392,7 +385,7 @@ public class RequestServiceTests
         }
 
         await using var context = CreateContext(dbName);
-        var service = CreateService(context);
+        var service = CreateStatusService(context);
 
         var result = await service.UpdateStatusAsync(requestId,
             new UpdateRequestStatusDto { Status = RequestStatus.InProgress, RowVersion = rowVersion });
@@ -407,7 +400,7 @@ public class RequestServiceTests
     public async Task UpdateStatusAsync_WhenRequestDoesNotExist_ThrowsNotFoundException()
     {
         await using var context = CreateContext(Guid.NewGuid().ToString());
-        var service = CreateService(context);
+        var service = CreateStatusService(context);
 
         await Assert.ThrowsAsync<NotFoundException>(() =>
             service.UpdateStatusAsync(999, new UpdateRequestStatusDto
@@ -434,7 +427,7 @@ public class RequestServiceTests
         }
 
         await using var context = CreateContext(dbName);
-        var service = CreateService(context);
+        var service = CreateStatusService(context);
 
         await Assert.ThrowsAsync<ValidationException>(() =>
             service.UpdateStatusAsync(requestId, new UpdateRequestStatusDto
@@ -443,8 +436,6 @@ public class RequestServiceTests
                 RowVersion = rowVersion
             }));
     }
-
-    // --- Optimistic concurrency (the selected assessment challenge) --------
 
     [Fact]
     public async Task UpdateStatusAsync_WhenRowVersionIsStale_ThrowsConcurrencyConflictException()
@@ -473,9 +464,8 @@ public class RequestServiceTests
             await otherClientContext.SaveChangesAsync();
         }
 
-        // First client attempts to update using the now-stale RowVersion it originally read.
         await using var staleClientContext = CreateContext(dbName);
-        var service = CreateService(staleClientContext);
+        var service = CreateStatusService(staleClientContext);
 
         await Assert.ThrowsAsync<ConcurrencyConflictException>(() =>
             service.UpdateStatusAsync(requestId, new UpdateRequestStatusDto

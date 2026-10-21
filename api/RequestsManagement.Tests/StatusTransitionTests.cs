@@ -48,8 +48,6 @@ public class StatusTransitionTests
         return data;
     }
 
-    // --- Policy ----------------------------------------------------------------
-
     [Fact]
     public void Matrix_CoversEveryPair_FiveAllowedElevenForbidden()
     {
@@ -89,8 +87,6 @@ public class StatusTransitionTests
         Assert.Contains("סטטוס סופי", ex.Message);
     }
 
-    // --- Service: the API path uses the same policy -------------------------
-
     [Theory]
     [MemberData(nameof(AllowedTransitions))]
     public async Task UpdateStatusAsync_AllowedTransition_Succeeds(RequestStatus from, RequestStatus to)
@@ -98,7 +94,7 @@ public class StatusTransitionTests
         var (dbName, id, rowVersion) = await SeedRequestAsync(from);
 
         await using var context = CreateContext(dbName);
-        var result = await CreateService(context).UpdateStatusAsync(id,
+        var result = await CreateStatusService(context).UpdateStatusAsync(id,
             new UpdateRequestStatusDto { Status = to, RowVersion = rowVersion });
 
         Assert.Equal(to, result.Status);
@@ -120,7 +116,7 @@ public class StatusTransitionTests
         await using (var context = CreateContext(dbName))
         {
             await Assert.ThrowsAsync<ValidationException>(() =>
-                CreateService(context).UpdateStatusAsync(id,
+                CreateStatusService(context).UpdateStatusAsync(id,
                     new UpdateRequestStatusDto { Status = to, RowVersion = rowVersion }));
         }
 
@@ -151,13 +147,14 @@ public class StatusTransitionTests
         }
 
         await using var context = CreateContext(dbName);
-        var service = CreateService(context);
+        var queries = CreateQueryService(context);
+        var updates = CreateStatusService(context);
 
-        var listed = (await service.GetRequestsAsync(new RequestQueryDto { SortBy = "createdAt", SortDirection = "asc" })).Items;
+        var listed = (await queries.GetRequestsAsync(new RequestQueryDto { SortBy = "createdAt", SortDirection = "asc" })).Items;
         Assert.Equal([RequestStatus.InProgress], listed.Single(r => r.Id == id).AllowedNextStatuses);
         Assert.Empty(listed.Single(r => r.Status == RequestStatus.Completed).AllowedNextStatuses);
 
-        var updated = await service.UpdateStatusAsync(id, new UpdateRequestStatusDto { Status = RequestStatus.InProgress, RowVersion = rowVersion });
+        var updated = await updates.UpdateStatusAsync(id, new UpdateRequestStatusDto { Status = RequestStatus.InProgress, RowVersion = rowVersion });
         Assert.Equal([RequestStatus.Waiting, RequestStatus.Completed], updated.AllowedNextStatuses);
     }
 
@@ -167,7 +164,7 @@ public class StatusTransitionTests
         await using var context = CreateContext(Guid.NewGuid().ToString());
 
         await Assert.ThrowsAsync<NotFoundException>(() =>
-            CreateService(context).UpdateStatusAsync(999,
+            CreateStatusService(context).UpdateStatusAsync(999,
                 new UpdateRequestStatusDto { Status = RequestStatus.New, RowVersion = Convert.ToBase64String(new byte[8]) }));
     }
 
@@ -188,7 +185,7 @@ public class StatusTransitionTests
 
         await using var context = CreateContext(dbName);
         await Assert.ThrowsAsync<ConcurrencyConflictException>(() =>
-            CreateService(context).UpdateStatusAsync(id,
+            CreateStatusService(context).UpdateStatusAsync(id,
                 new UpdateRequestStatusDto { Status = RequestStatus.InProgress, RowVersion = staleRowVersion }));
     }
 

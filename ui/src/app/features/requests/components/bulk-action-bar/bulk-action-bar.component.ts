@@ -8,7 +8,6 @@ import { MatSelectModule } from '@angular/material/select';
 import { REQUEST_STATUS_LABELS, RequestStatus } from '../../models/request.model';
 import { BULK_UPDATE_MAX_ITEMS } from '../../models/bulk-update-status.model';
 
-/** Shown while rows are selected: pick one target status and apply it to all of them. */
 @Component({
   selector: 'app-bulk-action-bar',
   imports: [ReactiveFormsModule, MatButtonModule, MatFormFieldModule, MatIconModule, MatProgressSpinnerModule, MatSelectModule],
@@ -17,7 +16,6 @@ import { BULK_UPDATE_MAX_ITEMS } from '../../models/bulk-update-status.model';
 })
 export class BulkActionBarComponent {
   readonly selectedCount = input.required<number>();
-  /** Statuses at least one selected request may move to (the server decides per request). */
   readonly targetStatuses = input.required<readonly RequestStatus[]>();
   readonly pending = input(false);
 

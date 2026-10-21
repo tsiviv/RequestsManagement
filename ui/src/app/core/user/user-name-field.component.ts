@@ -4,7 +4,6 @@ import { MatInputModule } from '@angular/material/input';
 import { MatIconModule } from '@angular/material/icon';
 import { CurrentUserService, USER_NAME_MAX_LENGTH } from './current-user.service';
 
-/** Toolbar field for the name recorded on status changes (see CurrentUserService). */
 @Component({
   selector: 'app-user-name-field',
   imports: [MatFormFieldModule, MatInputModule, MatIconModule],

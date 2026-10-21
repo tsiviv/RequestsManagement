@@ -75,7 +75,7 @@ public class HeaderCurrentUserTests
 
         await using (var context = CreateContext(dbName))
         {
-            var service = CreateService(context, new MissingCurrentUser());
+            var service = CreateStatusService(context, new MissingCurrentUser());
 
             await Assert.ThrowsAsync<ValidationException>(() => service.UpdateStatusAsync(id,
                 new UpdateRequestStatusDto { Status = RequestStatus.InProgress, RowVersion = rowVersion }));

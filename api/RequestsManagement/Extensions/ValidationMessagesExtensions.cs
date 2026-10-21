@@ -2,25 +2,18 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace RequestsManagement.Extensions;
 
-/// <summary>
-/// Hebrew messages for the validation errors produced by ASP.NET itself (model binding, JSON body,
-/// the automatic 400 of [ApiController]), so every error the API returns is in the users' language,
-/// like the app's own messages. The DTOs' DataAnnotations carry their own Hebrew ErrorMessage.
-/// </summary>
+// Hebrew messages for ASP.NET's own validation errors (model binding, JSON body, automatic 400).
 public static class ValidationMessagesExtensions
 {
     public const string InvalidInputTitle = "הקלט אינו תקין";
 
-    // Used when the JSON body cannot be read; System.Text.Json's own message is not exposed (see below).
     private const string InvalidJsonMessage = "גוף הבקשה אינו JSON תקין, או שאחד הערכים בו אינו מהסוג הנדרש.";
 
     public static IMvcBuilder AddHebrewValidationMessages(this IMvcBuilder builder)
     {
         builder.AddMvcOptions(options =>
         {
-            // Every required DTO field has an explicit [Required] with a Hebrew message. The implicit
-            // one (for non-nullable references) only added English duplicates such as
-            // "The dto field is required." next to the real error for an unreadable body.
+            // Required fields have an explicit Hebrew [Required]; the implicit one adds English duplicates.
             options.SuppressImplicitRequiredAttributeForNonNullableReferenceTypes = true;
 
             var messages = options.ModelBindingMessageProvider;
@@ -37,8 +30,7 @@ public static class ValidationMessagesExtensions
             messages.SetMissingRequestBodyRequiredValueAccessor(() => "נדרש גוף בקשה בפורמט JSON.");
         });
 
-        // Do not echo System.Text.Json's exception text (English, and it describes internal types);
-        // such errors get InvalidJsonMessage instead.
+        // Do not expose System.Text.Json's exception text (English, describes internal types).
         builder.AddJsonOptions(options => options.AllowInputFormatterExceptionMessages = false);
 
         builder.ConfigureApiBehaviorOptions(options =>

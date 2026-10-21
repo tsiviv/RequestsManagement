@@ -16,7 +16,7 @@ public class StatusHistoryTests
 
         await using (var context = CreateContext(dbName))
         {
-            await CreateService(context, new StubCurrentUser("דנה כהן")).UpdateStatusAsync(id,
+            await CreateStatusService(context, new StubCurrentUser("דנה כהן")).UpdateStatusAsync(id,
                 new UpdateRequestStatusDto { Status = RequestStatus.InProgress, RowVersion = rowVersion });
         }
 
@@ -38,7 +38,7 @@ public class StatusHistoryTests
         foreach (var next in new[] { RequestStatus.InProgress, RequestStatus.Waiting, RequestStatus.Completed })
         {
             await using var context = CreateContext(dbName);
-            var updated = await CreateService(context).UpdateStatusAsync(id,
+            var updated = await CreateStatusService(context).UpdateStatusAsync(id,
                 new UpdateRequestStatusDto { Status = next, RowVersion = rowVersion });
             rowVersion = updated.RowVersion;
         }
@@ -62,15 +62,13 @@ public class StatusHistoryTests
 
         await using (var context = CreateContext(dbName))
         {
-            await Assert.ThrowsAsync<ConcurrencyConflictException>(() => CreateService(context).UpdateStatusAsync(id,
+            await Assert.ThrowsAsync<ConcurrencyConflictException>(() => CreateStatusService(context).UpdateStatusAsync(id,
                 new UpdateRequestStatusDto { Status = RequestStatus.Completed, RowVersion = Convert.ToBase64String(BitConverter.GetBytes(99L)) }));
         }
 
         await using var verify = CreateContext(dbName);
         Assert.Empty(await verify.RequestStatusHistory.ToListAsync());
     }
-
-    // --- GET history ------------------------------------------------------------
 
     [Fact]
     public async Task GetHistoryAsync_ReturnsOnlyThisRequestsChanges_NewestFirst()
@@ -89,17 +87,17 @@ public class StatusHistoryTests
         foreach (var next in new[] { RequestStatus.InProgress, RequestStatus.Waiting })
         {
             await using var context = CreateContext(dbName);
-            rowVersion = (await CreateService(context).UpdateStatusAsync(id,
+            rowVersion = (await CreateStatusService(context).UpdateStatusAsync(id,
                 new UpdateRequestStatusDto { Status = next, RowVersion = rowVersion })).RowVersion;
         }
         await using (var context = CreateContext(dbName))
         {
-            await CreateService(context).UpdateStatusAsync(otherId,
+            await CreateStatusService(context).UpdateStatusAsync(otherId,
                 new UpdateRequestStatusDto { Status = RequestStatus.InProgress, RowVersion = otherRowVersion });
         }
 
         await using var read = CreateContext(dbName);
-        var history = await CreateService(read).GetHistoryAsync(id);
+        var history = await CreateQueryService(read).GetHistoryAsync(id);
 
         Assert.Equal(2, history.Count);
         Assert.Equal((RequestStatus.InProgress, RequestStatus.Waiting), (history[0].PreviousStatus, history[0].NewStatus));
@@ -122,7 +120,7 @@ public class StatusHistoryTests
         }
 
         await using var read = CreateContext(dbName);
-        var history = await CreateService(read).GetHistoryAsync(id);
+        var history = await CreateQueryService(read).GetHistoryAsync(id);
 
         Assert.Equal(["second", "first"], history.Select(h => h.ChangedBy));
     }
@@ -133,20 +131,18 @@ public class StatusHistoryTests
         var (dbName, id, _) = await SeedRequestAsync(RequestStatus.New);
 
         await using var read = CreateContext(dbName);
-        Assert.Empty(await CreateService(read).GetHistoryAsync(id));
+        Assert.Empty(await CreateQueryService(read).GetHistoryAsync(id));
     }
 
     [Fact]
     public async Task GetHistoryAsync_MissingRequest_ThrowsNotFound()
     {
         await using var read = CreateContext(Guid.NewGuid().ToString());
-        await Assert.ThrowsAsync<NotFoundException>(() => CreateService(read).GetHistoryAsync(999));
+        await Assert.ThrowsAsync<NotFoundException>(() => CreateQueryService(read).GetHistoryAsync(999));
     }
 
-    // A conflict detected by the database itself (a writer committing between our load and our
-    // SaveChanges) must roll back the history INSERT together with the UPDATE. That relies on the
-    // SaveChanges transaction, which the InMemory provider does not have, so it is verified
-    // against SQL Server in the integration tests (WORK_PLAN T8.3).
+    // Rollback of the history row on a database-detected conflict needs a real transaction, so it is
+    // tested against SQL Server (ConcurrencyApiTests).
 
     private static async Task<(string DbName, int Id, string RowVersion)> SeedRequestAsync(RequestStatus status)
     {
