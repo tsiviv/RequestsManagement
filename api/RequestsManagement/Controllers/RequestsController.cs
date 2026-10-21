@@ -8,7 +8,8 @@ namespace RequestsManagement.Controllers;
 [ApiController]
 [Route("api/requests")]
 public class RequestsController(IRequestQueryService queries, IRequestStatusService statusUpdates) : ControllerBase
-{    [HttpGet]
+{
+    [HttpGet]
     [ProducesResponseType(typeof(PagedResultDto<RequestDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<PagedResultDto<RequestDto>>> GetRequests(
@@ -17,26 +18,34 @@ public class RequestsController(IRequestQueryService queries, IRequestStatusServ
     {
         var result = await queries.GetRequestsAsync(query, cancellationToken);
         return Ok(result);
-    }    [HttpGet("summary")]
+    }
+
+    [HttpGet("summary")]
     [ProducesResponseType(typeof(RequestSummaryDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<RequestSummaryDto>> GetSummary(CancellationToken cancellationToken)
     {
         var result = await queries.GetSummaryAsync(cancellationToken);
         return Ok(result);
-    }    [HttpGet("filter-options")]
+    }
+
+    [HttpGet("filter-options")]
     [ProducesResponseType(typeof(RequestFilterOptionsDto), StatusCodes.Status200OK)]
     public async Task<ActionResult<RequestFilterOptionsDto>> GetFilterOptions(CancellationToken cancellationToken)
     {
         var result = await queries.GetFilterOptionsAsync(cancellationToken);
         return Ok(result);
-    }    [HttpGet("{id:int}/history")]
+    }
+
+    [HttpGet("{id:int}/history")]
     [ProducesResponseType(typeof(IReadOnlyList<RequestStatusHistoryDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<ActionResult<IReadOnlyList<RequestStatusHistoryDto>>> GetHistory(int id, CancellationToken cancellationToken)
     {
         var result = await queries.GetHistoryAsync(id, cancellationToken);
         return Ok(result);
-    }    [HttpPatch("{id:int}/status")]
+    }
+
+    [HttpPatch("{id:int}/status")]
     [ProducesResponseType(typeof(RequestDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
@@ -48,7 +57,9 @@ public class RequestsController(IRequestQueryService queries, IRequestStatusServ
     {
         var result = await statusUpdates.UpdateStatusAsync(id, dto, cancellationToken);
         return Ok(result);
-    }    [HttpPost("status/bulk")]
+    }
+
+    [HttpPost("status/bulk")]
     [ProducesResponseType(typeof(BulkUpdateStatusResultDto), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     public async Task<ActionResult<BulkUpdateStatusResultDto>> BulkUpdateStatus(
